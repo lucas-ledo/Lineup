@@ -1,5 +1,5 @@
 const BASE_URL = 'https://sports.bzzoiro.com/api/v2'
-const IMAGE_PROXY_PATH = '/api/sports-images'
+const IMAGE_BASE_URL = 'https://sports.bzzoiro.com/img'
 
 const positionMap = {
   G: 'Goalkeeper',
@@ -13,7 +13,7 @@ function getApiKey() {
 }
 
 function getImageUrl(type, id, query = '') {
-  return id ? `${IMAGE_PROXY_PATH}/${type}/${id}/${query}` : null
+  return id ? `${IMAGE_BASE_URL}/${type}/${id}/${query}` : null
 }
 
 function getErrorMessage(payload) {
