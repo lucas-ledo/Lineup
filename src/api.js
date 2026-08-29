@@ -1,53 +1,106 @@
-const BASE_URL = 'https://v3.football.api-sports.io'
+const BASE_URL = 'https://sports.bzzoiro.com/api/v2'
+const IMAGE_PROXY_PATH = '/api/sports-images'
 
-function getKey() {
-  return import.meta.env.VITE_API_FOOTBALL_KEY
+const positionMap = {
+  G: 'Goalkeeper',
+  D: 'Defender',
+  M: 'Midfielder',
+  F: 'Attacker',
+}
+
+function getApiKey() {
+  return import.meta.env.VITE_BZZOIRO_API_KEY
+}
+
+function getImageUrl(type, id, query = '') {
+  return id ? `${IMAGE_PROXY_PATH}/${type}/${id}/${query}` : null
+}
+
+function getErrorMessage(payload) {
+  if (typeof payload?.detail === 'string') return payload.detail
+  if (typeof payload?.message === 'string') return payload.message
+  if (typeof payload?.error === 'string') return payload.error
+  if (Array.isArray(payload?.errors)) return payload.errors[0]
+  return 'No se pudieron obtener los datos deportivos.'
 }
 
 async function request(path) {
-  const apiKey = getKey()
-  if (!apiKey || apiKey === 'tu_clave_api_football') {
-    throw new Error('Añade VITE_API_FOOTBALL_KEY en tu archivo .env para consultar la API.')
+  const apiKey = getApiKey()
+  if (!apiKey || apiKey === 'tu_token_de_bzzoiro') {
+    throw new Error('Añade VITE_BZZOIRO_API_KEY en tu archivo .env para consultar Sports Data Hub.')
   }
 
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'x-apisports-key': apiKey },
+    headers: { Authorization: `Token ${apiKey}` },
   })
-  const data = await response.json()
+  const payload = await response.json().catch(() => null)
 
-  const apiErrors = data.errors ? Object.values(data.errors).flat().filter(Boolean) : []
-  if (!response.ok || apiErrors.length) {
-    throw new Error(String(apiErrors[0] || 'No se pudieron obtener los datos de la API.'))
+  if (!response.ok) throw new Error(getErrorMessage(payload))
+  return payload
+}
+
+function getResults(payload) {
+  if (Array.isArray(payload)) return payload
+  return payload?.results || payload?.players || payload?.squad || []
+}
+
+function normalizeTeam(team) {
+  const id = team.id ?? team.team_id
+  return {
+    id,
+    name: team.name || team.short_name || 'Equipo sin nombre',
+    logo: getImageUrl('team', id, '?bg=transparent'),
   }
-  return data.response
+}
+
+function normalizePosition(position) {
+  if (positionMap[position]) return positionMap[position]
+  if (position === 'Goalkeeper' || position === 'Defender' || position === 'Midfielder' || position === 'Attacker') return position
+  return 'Unknown'
+}
+
+function normalizePlayer(player, fallbackClub = null) {
+  const teamId = player.team?.id ?? player.team_id ?? player.current_team_id
+  const teamName = player.team?.name ?? player.team_name ?? player.current_team_name
+  const club = teamId ? {
+    id: teamId,
+    name: teamName || 'Club actual',
+    logo: getImageUrl('team', teamId, '?bg=transparent'),
+  } : fallbackClub
+
+  return {
+    id: player.id ?? player.player_id,
+    name: player.name || player.display_name || 'Jugador sin nombre',
+    photo: getImageUrl('player', player.id ?? player.player_id, '?sor=true&bg=transparent'),
+    position: normalizePosition(player.position),
+    number: player.shirt_number ?? player.number ?? player.jersey_number ?? null,
+    club,
+  }
 }
 
 export async function searchTeams(query) {
-  return request(`/teams?search=${encodeURIComponent(query)}`)
+  const payload = await request(`/teams/?name=${encodeURIComponent(query)}&limit=8`)
+  return getResults(payload).map((team) => ({
+    team: normalizeTeam(team),
+    venue: team.venue ? { name: team.venue.name } : null,
+    country: team.country?.name || team.country_name || team.country_code || '',
+  }))
 }
 
 export async function getSquad(teamId) {
-  const squads = await request(`/players/squads?team=${teamId}`)
-  return squads[0] || null
+  const payload = await request(`/teams/${teamId}/squad/`)
+  const players = getResults(payload).map((player) => normalizePlayer(player))
+  return { players }
 }
 
 export async function searchPlayers(query) {
-  const year = new Date().getFullYear()
-  const season = new Date().getMonth() < 6 ? year - 1 : year
-  const results = await request(`/players?search=${encodeURIComponent(query)}&season=${season}`)
+  const payload = await request(`/players/?name=${encodeURIComponent(query)}&limit=20`)
   const uniquePlayers = new Map()
 
-  results.forEach(({ player, statistics = [] }) => {
-    if (!player || uniquePlayers.has(player.id)) return
-    const currentClub = statistics[0]?.team
-    uniquePlayers.set(player.id, {
-      id: player.id,
-      name: player.name,
-      photo: player.photo,
-      position: statistics[0]?.games?.position || 'Unknown',
-      number: player.number,
-      club: currentClub,
-    })
+  getResults(payload).forEach((player) => {
+    const normalized = normalizePlayer(player)
+    if (normalized.id && !uniquePlayers.has(normalized.id)) uniquePlayers.set(normalized.id, normalized)
   })
+
   return [...uniquePlayers.values()]
 }

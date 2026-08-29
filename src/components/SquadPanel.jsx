@@ -8,6 +8,7 @@ export function SquadPanel({
   positionFilter,
   isLoading,
   assignedIds,
+  starters,
   saleDraft,
   onFilterChange,
   onResetLineup,

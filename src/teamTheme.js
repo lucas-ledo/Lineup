@@ -84,44 +84,10 @@ function getKnownTheme(teamName) {
 export async function getClubTheme(logoUrl, teamName) {
   const knownTheme = getKnownTheme(teamName)
   if (knownTheme) return knownTheme
-  if (!logoUrl) return fallbackTheme
-
-  try {
-    const image = new Image()
-    image.crossOrigin = 'anonymous'
-    image.src = logoUrl
-    await new Promise((resolve, reject) => {
-      image.onload = resolve
-      image.onerror = reject
-    })
-
-    const canvas = document.createElement('canvas')
-    canvas.width = 64
-    canvas.height = 64
-    const context = canvas.getContext('2d', { willReadFrequently: true })
-    context.drawImage(image, 0, 0, 64, 64)
-    const { data } = context.getImageData(0, 0, 64, 64)
-    const colors = new Map()
-
-    for (let index = 0; index < data.length; index += 16) {
-      const [red, green, blue, alpha] = data.slice(index, index + 4)
-      if (alpha < 180) continue
-      const maximum = Math.max(red, green, blue)
-      const minimum = Math.min(red, green, blue)
-      const saturation = maximum ? (maximum - minimum) / maximum : 0
-      const brightness = (red + green + blue) / (3 * 255)
-      if (saturation < 0.28 || brightness > 0.9 || brightness < 0.1) continue
-
-      const quantized = [red, green, blue].map((channel) => Math.round(channel / 32) * 32).map((channel) => Math.min(channel, 255))
-      const key = quantized.join(',')
-      colors.set(key, (colors.get(key) || 0) + saturation * (brightness > 0.18 ? 1 : 0.4))
-    }
-
-    const dominant = [...colors.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
-    return dominant ? toTheme(...dominant.split(',').map(Number)) : fallbackTheme
-  } catch {
-    return fallbackTheme
-  }
+  // La Image API de BSD no habilita CORS, por lo que no se puede leer el píxel
+  // del escudo desde el navegador. Los clubes conocidos conservan su color real;
+  // el resto usa una paleta neutra hasta disponer de un color de perfil en la API.
+  return fallbackTheme
 }
 
 export { fallbackTheme }

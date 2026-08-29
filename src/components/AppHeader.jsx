@@ -9,7 +9,7 @@ export function AppHeader({ team, startersCount, subsCount, theme, onThemeChange
       </a>
       <div className="topbar-copy"><span className="live-dot" /> SISTEMA DE PIZARRA <b>01/11</b></div>
       <div className="topbar-actions">
-        <a className="api-link" href="https://www.api-football.com/documentation-v3" target="_blank" rel="noreferrer">DATA FEED</a>
+        <a className="api-link" href="https://sports.bzzoiro.com/docs/football/" target="_blank" rel="noreferrer">DATA FEED</a>
         <div className="theme-switcher" aria-label="Apariencia">
           <button className={theme === 'light' ? 'is-active' : ''} onClick={() => onThemeChange('light')} aria-pressed={theme === 'light'}>CLARO</button>
           <button className={theme === 'dark' ? 'is-active' : ''} onClick={() => onThemeChange('dark')} aria-pressed={theme === 'dark'}>OSCURO</button>

@@ -5,7 +5,7 @@ Aplicación React para crear un once titular y 11 suplentes a partir de la plant
 ## Puesta en marcha
 
 1. Instala las dependencias con `pnpm install`.
-2. Crea un archivo `.env` a partir de `.env.example` y añade `VITE_API_FOOTBALL_KEY`.
+2. Crea un archivo `.env` a partir de `.env.example` y añade `VITE_BZZOIRO_API_KEY`.
 3. Ejecuta `pnpm dev`.
 
 Para verificar la versión de producción: `pnpm run build`.
@@ -16,7 +16,8 @@ Para verificar la versión de producción: `pnpm run build`.
 src/
   components/   Vistas reutilizables: cabecera, selector, campo, plantilla, mercado y banquillo.
   utils/        Formateo de importes, dorsales e iniciales.
-  api.js        Cliente de API-Football y normalización de respuestas.
+  api.js        Cliente de Sports Data Hub (Bzzoiro) y normalización de respuestas.
+api/            Proxy de imágenes para que fotos y escudos puedan capturarse sin CORS en Vercel.
   data.js       Formaciones y etiquetas de posición.
   teamTheme.js  Paleta dinámica según el club seleccionado.
   App.jsx       Estado de aplicación y reglas de negocio.

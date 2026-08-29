@@ -18,6 +18,55 @@ const PLAYER_SEARCH_MIN_LENGTH = 3
 
 const emptyStatus = { loading: false, message: '' }
 
+function getProxiedImageUrl(source) {
+  const imageUrl = new URL(source, window.location.origin)
+  const bzzoiroOrigin = 'https://sports.bzzoiro.com'
+
+  if (imageUrl.origin === bzzoiroOrigin && imageUrl.pathname.startsWith('/img/')) {
+    return `/api/sports-images${imageUrl.pathname.slice('/img'.length)}${imageUrl.search}`
+  }
+
+  return imageUrl.href
+}
+
+async function preloadCaptureImages(container) {
+  const sources = [...new Set([...container.querySelectorAll('img')].map((image) => image.currentSrc || image.src).filter(Boolean))]
+  const assets = new Map()
+  const objectUrls = []
+
+  await Promise.all(sources.map(async (source) => {
+    const response = await fetch(getProxiedImageUrl(source))
+    if (!response.ok) throw new Error(`No se pudo cargar una imagen (${response.status}).`)
+    const blob = await response.blob()
+    if (!blob.size) return
+    const objectUrl = URL.createObjectURL(blob)
+    assets.set(source, objectUrl)
+    objectUrls.push(objectUrl)
+  }))
+
+  return { assets, objectUrls }
+}
+
+function waitForImageLoad(image) {
+  if (image.complete && image.naturalWidth > 0) return Promise.resolve()
+
+  return new Promise((resolve) => {
+    image.addEventListener('load', resolve, { once: true })
+    image.addEventListener('error', resolve, { once: true })
+  })
+}
+
+async function replaceImagesForCapture(container, assets) {
+  const replacements = [...container.querySelectorAll('img')]
+    .map((image) => ({ image, originalSource: image.src, asset: assets.get(image.currentSrc || image.src) }))
+    .filter((item) => item.asset)
+
+  replacements.forEach(({ image, asset }) => { image.src = asset })
+  await Promise.all(replacements.map(({ image }) => waitForImageLoad(image)))
+
+  return () => replacements.forEach(({ image, originalSource }) => { image.src = originalSource })
+}
+
 function App() {
   const [query, setQuery] = useState('')
   const [teams, setTeams] = useState([])
@@ -376,16 +425,55 @@ function App() {
       return
     }
     setIsSharing(true)
+    let captureAssets = null
+    let restoreImages = null
     try {
-      const canvas = await html2canvas(lineupCaptureRef.current, { backgroundColor: theme === 'dark' ? '#0b2824' : '#f9fbf7', scale: 2, useCORS: true, logging: false })
+      captureAssets = await preloadCaptureImages(lineupCaptureRef.current)
+      restoreImages = await replaceImagesForCapture(lineupCaptureRef.current, captureAssets.assets)
+      const canvas = await html2canvas(lineupCaptureRef.current, {
+        backgroundColor: theme === 'dark' ? '#0b2824' : '#f9fbf7',
+        scale: 2,
+        useCORS: false,
+        logging: false,
+        imageTimeout: 0,
+        onclone: (clonedDocument) => {
+          const clonedPitch = clonedDocument.querySelector('.pitch-panel')
+          const captureStyle = clonedDocument.createElement('style')
+          captureStyle.textContent = `
+            .capture-compatible .field-card,
+            .app-shell--club-themed .capture-compatible .field-card {
+              background: #13181a !important;
+              border-color: rgba(232, 250, 215, .7) !important;
+              box-shadow: 0 4px 0 rgba(0, 0, 0, .24) !important;
+            }
+            .capture-compatible .field-details,
+            .app-shell--club-themed .capture-compatible .field-details { background: transparent !important; }
+            .capture-compatible .field-details small,
+            .app-shell--club-themed .capture-compatible .field-details small { color: #b8c1bd !important; }
+            [data-theme='light'] .capture-compatible .field-card,
+            [data-theme='light'] .app-shell--club-themed .capture-compatible .field-card {
+              background: #ffffff !important;
+              border-color: #d4dad5 !important;
+              box-shadow: 0 3px 0 rgba(31, 38, 48, .12) !important;
+            }
+            [data-theme='light'] .capture-compatible .field-details small,
+            [data-theme='light'] .app-shell--club-themed .capture-compatible .field-details small { color: #61736a !important; }
+          `
+          clonedDocument.head.append(captureStyle)
+          clonedPitch?.classList.add('capture-compatible')
+        },
+      })
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
       if (!blob) throw new Error('No se pudo generar la imagen.')
       const fileName = `${team.name.toLowerCase().replaceAll(' ', '-')}-alineacion.png`
       setShareFile(new File([blob], fileName, { type: 'image/png' }))
       setStatus({ loading: false, message: 'Imagen lista. Usa “Compartir foto” para enviarla.' })
-    } catch {
+    } catch (error) {
+      console.error('No se pudo crear la imagen de la alineación.', error)
       setStatus({ loading: false, message: 'No se pudo generar la imagen. Prueba a crearla de nuevo.' })
     } finally {
+      restoreImages?.()
+      captureAssets?.objectUrls.forEach((url) => URL.revokeObjectURL(url))
       setIsSharing(false)
     }
   }
@@ -419,7 +507,7 @@ function App() {
     {team && <TransferMarket isOpen={marketOpen} mode={marketMode} query={marketQuery} teams={marketTeams} selectedTeam={marketTeam} players={marketPlayers} status={marketStatus} transferLog={transferLog} spend={spend} income={income} roster={players} signingDraft={signingDraft} onToggle={() => setMarketOpen((current) => !current)} onModeChange={changeMarketMode} onQueryChange={setMarketQuery} onSearch={handleMarketSearch} onSelectTeam={selectMarketTeam} onClearSelectedTeam={() => { setMarketTeam(null); setMarketPlayers([]) }} onStartSigning={(player) => setSigningDraft({ player, price: '' })} onSigningDraftChange={setSigningDraft} onConfirmSigning={confirmSigning} onUndoTransfer={undoTransfer} />}
     <section className="workspace">
       <LineupPitch captureRef={lineupCaptureRef} team={team} formation={formation} formations={formations} slots={slots} starters={starters} startersCount={startersCount} subsCount={subs.length} selectedSlot={selectedSlot} draggedPlayer={draggedPlayer} touchDrag={touchDrag} isSharing={isSharing} shareFile={shareFile} onShare={shareLineup} onSharePrepared={sharePreparedImage} onFormationChange={updateFormation} onAllowDrop={(event) => event.preventDefault()} onDropSlot={dropOnSlot} onSelectSlot={setSelectedSlot} onClearPlayer={clearPlayer} onDragStart={beginDrag} onDragEnd={() => setDraggedPlayer(null)} onPointerDown={beginTouchMove} onPointerMove={moveTouchPlayer} onPointerUp={endTouchMove} onPointerCancel={endTouchMove} shouldSuppressTap={() => suppressTapRef.current} />
-      <SquadPanel team={team} players={players} visiblePlayers={visiblePlayers} positionFilter={positionFilter} isLoading={status.loading} assignedIds={assignedIds} saleDraft={saleDraft} onFilterChange={setPositionFilter} onResetLineup={resetLineup} onAddToStarting={addToStarting} onAddToBench={addToBench} onDragStart={beginDrag} onDragEnd={() => setDraggedPlayer(null)} onSaleDraftChange={setSaleDraft} onConfirmSale={confirmSale} />
+      <SquadPanel team={team} players={players} visiblePlayers={visiblePlayers} positionFilter={positionFilter} isLoading={status.loading} assignedIds={assignedIds} starters={starters} saleDraft={saleDraft} onFilterChange={setPositionFilter} onResetLineup={resetLineup} onAddToStarting={addToStarting} onAddToBench={addToBench} onDragStart={beginDrag} onDragEnd={() => setDraggedPlayer(null)} onSaleDraftChange={setSaleDraft} onConfirmSale={confirmSale} />
     </section>
     <Bench subs={subs} onAllowDrop={(event) => event.preventDefault()} onDrop={dropOnBench} onClearPlayer={clearPlayer} onDragStart={beginDrag} onDragEnd={() => setDraggedPlayer(null)} />
     <footer>LINEUP · Construye, ajusta y comparte tu equipo ideal.</footer>
