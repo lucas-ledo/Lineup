@@ -28,3 +28,5 @@ api/            Proxy de imágenes para que fotos y escudos puedan capturarse si
 - `App.jsx` no contiene marcado de secciones grandes; coordina estado y eventos.
 - Cada componente recibe datos y callbacks explícitos.
 - `pnpm-lock.yaml` es el único lockfile del repositorio.
+
+-----
