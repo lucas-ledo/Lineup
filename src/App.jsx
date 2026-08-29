@@ -407,35 +407,32 @@ function App() {
   return (
     <main className={`app-shell ${team ? 'app-shell--club-themed' : ''}`} style={{ '--club-primary': clubTheme.primary }}>
       <header className="topbar">
-        <a className="brand" href="/" aria-label="Lineup, inicio"><span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><rect x="4" y="3" width="24" height="26" rx="3" stroke="currentColor" strokeWidth="2" /><path d="M4 16h24M16 3v26" stroke="currentColor" strokeWidth="1.5" opacity=".55" /><circle cx="10" cy="10" r="2.3" fill="currentColor" /><circle cx="22" cy="12" r="2.3" fill="currentColor" /><circle cx="16" cy="22" r="2.3" fill="currentColor" /><path d="m11.8 11.2 7.9 1.4-2.8 6.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg></span><span>lineup</span></a>
-        <div className="topbar-copy"><span className="live-dot" /> Creador de alineaciones</div>
-        <div className="theme-switcher" aria-label="Apariencia">
-          <button className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')} aria-pressed={theme === 'light'}>☀ Claro</button>
-          <button className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')} aria-pressed={theme === 'dark'}>◐ Oscuro</button>
-        </div>
-        <a className="api-link" href="https://www.api-football.com/documentation-v3" target="_blank" rel="noreferrer">Datos por API-Football ↗</a>
+        <a className="brand" href="/" aria-label="Lineup, inicio"><span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 42 30" fill="none"><path d="M2 6h12l6 9 6-9h14M2 24h12l6-9 6 9h14" stroke="currentColor" strokeWidth="3" strokeLinecap="square" /><circle cx="20" cy="15" r="3" fill="currentColor" /></svg></span><span>lineup</span><i>LAB</i></a>
+        <div className="topbar-copy"><span className="live-dot" /> ESTUDIO DE CONVOCATORIAS <b>01/11</b></div>
+        <div className="topbar-actions"><a className="api-link" href="https://www.api-football.com/documentation-v3" target="_blank" rel="noreferrer">DATA FEED</a><div className="theme-switcher" aria-label="Apariencia"><button className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')} aria-pressed={theme === 'light'}>CLARO</button><button className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')} aria-pressed={theme === 'dark'}>OSCURO</button></div></div>
       </header>
 
       <section className="hero">
-        <div>
-          <p className="eyebrow">GESTOR DE PLANTILLAS</p>
-          <h1>Tu once.<br /><em>Tus reglas.</em></h1>
-          <p className="hero-text">Elige un equipo, consulta su plantilla actual y construye la convocatoria perfecta.</p>
+        <div className="hero-rail" aria-hidden="true"><span>LINEUP LAB</span><b>01</b></div>
+        <div className="hero-copy">
+          <p className="eyebrow">SALA DE PIZARRA / TEMPORADA ABIERTA</p>
+          <h1>Diseña<br />la <em>decisión.</em></h1>
+          <p className="hero-text">Construye una convocatoria, prueba movimientos y deja que la pizarra hable por ti.</p>
         </div>
-        <div className="hero-score" aria-label={`${startersCount} titulares y ${subs.length} suplentes`}>
-          <strong>{String(startersCount).padStart(2, '0')}<span>/11</span></strong>
-          <small>TITULARES</small>
-          <strong>{String(subs.length).padStart(2, '0')}<span>/11</span></strong>
-          <small>SUPLENTES</small>
+        <div className={`hero-club ${team ? '' : 'hero-club--empty'}`}>
+          <div className="hero-club-heading"><span>{team ? 'CLUB EN MESA' : 'PUNTO DE PARTIDA'}</span><b>{team ? 'ACTIVO' : '00'}</b></div>
+          {team ? <><img src={team.logo} alt="" /><strong>{team.name}</strong></> : <strong>Elige<br />un club</strong>}
+          <div className="hero-score" aria-label={`${startersCount} titulares y ${subs.length} suplentes`}><div><strong>{String(startersCount).padStart(2, '0')}<span>/11</span></strong><small>TITULARES</small></div><div><strong>{String(subs.length).padStart(2, '0')}<span>/11</span></strong><small>SUPLENTES</small></div></div>
         </div>
       </section>
 
-      <section className="team-picker" aria-label="Selecciona un equipo">
+      <section className={`team-picker ${team ? 'team-picker--chosen' : ''}`} aria-label="Selecciona un equipo">
+        <div className="picker-index" aria-hidden="true"><b>01</b><span>CLUB</span></div>
         <form onSubmit={handleSearch} className="search-form">
-          <label htmlFor="team-search">Busca un equipo</label>
+          <label htmlFor="team-search">Abre una plantilla</label>
           <div className="search-row">
-            <input id="team-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ej. Real Madrid, Arsenal..." autoComplete="off" />
-            <button className="button button--primary" type="submit" disabled={status.loading}>{status.loading ? 'Buscando...' : 'Buscar'}</button>
+            <input id="team-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Escribe un club: Real Madrid, Arsenal..." autoComplete="off" />
+            <button className="button button--primary" type="submit" disabled={status.loading}>{status.loading ? 'Buscando...' : 'Ver plantilla'}</button>
           </div>
         </form>
         {team && <div className="selected-team"><span className="selected-team-label">Equipo seleccionado</span><div className="selected-team-value"><img src={team.logo} alt="" /><span>{team.name}</span><button onClick={() => { setTeam(null); setPlayers([]); resetLineup(); setMarketOpen(false) }} aria-label="Cambiar de equipo">×</button></div></div>}
