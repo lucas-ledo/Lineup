@@ -5,6 +5,13 @@ const fallbackTheme = {
   onPrimary: '#ffffff',
 }
 
+export function applyClubTheme(theme) {
+  Object.entries(theme).forEach(([key, value]) => {
+    const cssVariable = `--club-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`
+    document.documentElement.style.setProperty(cssVariable, value)
+  })
+}
+
 const knownClubColors = {
   'real madrid': '#00529f',
   barcelona: '#a50044',
