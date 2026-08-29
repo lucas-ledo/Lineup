@@ -1,0 +1,48 @@
+export const formations = {
+  '4-3-3': [
+    { id: 'gk', label: 'POR', kind: 'Goalkeeper', x: 50, y: 88 },
+    { id: 'rb', label: 'LD', kind: 'Defender', x: 82, y: 70 },
+    { id: 'rcb', label: 'DFC', kind: 'Defender', x: 61, y: 72 },
+    { id: 'lcb', label: 'DFC', kind: 'Defender', x: 39, y: 72 },
+    { id: 'lb', label: 'LI', kind: 'Defender', x: 18, y: 70 },
+    { id: 'rcm', label: 'MC', kind: 'Midfielder', x: 72, y: 46 },
+    { id: 'cm', label: 'MC', kind: 'Midfielder', x: 50, y: 40 },
+    { id: 'lcm', label: 'MC', kind: 'Midfielder', x: 28, y: 46 },
+    { id: 'rw', label: 'ED', kind: 'Attacker', x: 78, y: 20 },
+    { id: 'st', label: 'DC', kind: 'Attacker', x: 50, y: 13 },
+    { id: 'lw', label: 'EI', kind: 'Attacker', x: 22, y: 20 },
+  ],
+  '4-4-2': [
+    { id: 'gk', label: 'POR', kind: 'Goalkeeper', x: 50, y: 88 },
+    { id: 'rb', label: 'LD', kind: 'Defender', x: 82, y: 70 },
+    { id: 'rcb', label: 'DFC', kind: 'Defender', x: 61, y: 72 },
+    { id: 'lcb', label: 'DFC', kind: 'Defender', x: 39, y: 72 },
+    { id: 'lb', label: 'LI', kind: 'Defender', x: 18, y: 70 },
+    { id: 'rm', label: 'MD', kind: 'Midfielder', x: 82, y: 45 },
+    { id: 'rcm', label: 'MC', kind: 'Midfielder', x: 61, y: 43 },
+    { id: 'lcm', label: 'MC', kind: 'Midfielder', x: 39, y: 43 },
+    { id: 'lm', label: 'MI', kind: 'Midfielder', x: 18, y: 45 },
+    { id: 'rst', label: 'DC', kind: 'Attacker', x: 62, y: 16 },
+    { id: 'lst', label: 'DC', kind: 'Attacker', x: 38, y: 16 },
+  ],
+  '3-5-2': [
+    { id: 'gk', label: 'POR', kind: 'Goalkeeper', x: 50, y: 88 },
+    { id: 'rcb', label: 'DFC', kind: 'Defender', x: 72, y: 71 },
+    { id: 'cb', label: 'DFC', kind: 'Defender', x: 50, y: 74 },
+    { id: 'lcb', label: 'DFC', kind: 'Defender', x: 28, y: 71 },
+    { id: 'rwb', label: 'CAD', kind: 'Midfielder', x: 88, y: 48 },
+    { id: 'rcm', label: 'MC', kind: 'Midfielder', x: 67, y: 47 },
+    { id: 'cm', label: 'MC', kind: 'Midfielder', x: 50, y: 39 },
+    { id: 'lcm', label: 'MC', kind: 'Midfielder', x: 33, y: 47 },
+    { id: 'lwb', label: 'CAI', kind: 'Midfielder', x: 12, y: 48 },
+    { id: 'rst', label: 'DC', kind: 'Attacker', x: 62, y: 16 },
+    { id: 'lst', label: 'DC', kind: 'Attacker', x: 38, y: 16 },
+  ],
+}
+
+export const positionNames = {
+  Goalkeeper: 'Portero',
+  Defender: 'Defensa',
+  Midfielder: 'Centrocampista',
+  Attacker: 'Delantero',
+}
