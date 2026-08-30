@@ -1,4 +1,4 @@
-import { applyCachePolicy, applyNoStore, CACHE_POLICY } from '../lib/cachePolicy.js'
+import { applyCachePolicy, applyNoStore, CACHE_POLICY } from './lib/cachePolicy.js'
 
 const IMAGE_BASE_URL = 'https://sports.bzzoiro.com/img'
 const ALLOWED_TYPES = new Set(['team', 'player', 'league', 'manager', 'venue'])
@@ -10,7 +10,10 @@ function getRequestUrl(request) {
 }
 
 function getPathParts(request) {
-  const rewrittenPath = request.query?.__lineup_path ?? getRequestUrl(request).searchParams.get('__lineup_path')
+  const rewrittenPath = request.query?.__lineup_path
+    ?? request.query?.lineup_path
+    ?? getRequestUrl(request).searchParams.get('__lineup_path')
+    ?? getRequestUrl(request).searchParams.get('lineup_path')
   const normalizedRewrittenPath = Array.isArray(rewrittenPath) ? rewrittenPath[0] : rewrittenPath
   if (typeof normalizedRewrittenPath === 'string' && normalizedRewrittenPath) {
     return normalizedRewrittenPath.split('/').filter(Boolean)

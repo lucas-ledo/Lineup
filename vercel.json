@@ -2,12 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "^/api/football/(.+)$",
-      "destination": "/api/football?__lineup_path=$1"
+      "source": "/api/football/:lineup_path*",
+      "destination": "/api/football"
     },
     {
-      "source": "^/api/sports-images/(.+)$",
-      "destination": "/api/sports-images?__lineup_path=$1"
+      "source": "/api/sports-images/:lineup_path*",
+      "destination": "/api/sports-images"
     }
   ]
 }
