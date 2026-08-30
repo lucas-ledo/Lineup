@@ -12,7 +12,9 @@ function getPathParts(path) {
 function getImageParameters(query) {
   const parameters = new URLSearchParams()
   ALLOWED_PARAMETERS.forEach((parameter) => {
-    if (typeof query[parameter] === 'string') parameters.set(parameter, query[parameter])
+    const value = query?.[parameter]
+    const normalizedValue = Array.isArray(value) ? value[0] : value
+    if (typeof normalizedValue === 'string') parameters.set(parameter, normalizedValue)
   })
   return parameters.toString()
 }
