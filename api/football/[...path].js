@@ -4,15 +4,22 @@ import { getClubColorsFromWikidata } from '../lib/wikidata.js'
 
 const BASE_URL = 'https://sports.bzzoiro.com/api/v2'
 
-function getPathParts(path) {
-  if (Array.isArray(path)) return path
-  return typeof path === 'string' ? path.split('/') : []
+function getRequestUrl(request) {
+  const host = request.headers?.host || 'localhost'
+  return new URL(request.url || '/', `https://${host}`)
 }
 
-function getQueryValue(query, key) {
-  const value = query?.[key]
+function getPathParts(request) {
+  const pathname = getRequestUrl(request).pathname
+  const relativePath = pathname.replace(/^\/api\/football\/?/, '')
+  return relativePath.split('/').filter(Boolean)
+}
+
+function getQueryValue(request, key) {
+  const value = request.query?.[key]
   if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0].trim() : ''
-  return typeof value === 'string' ? value.trim() : ''
+  if (typeof value === 'string') return value.trim()
+  return getRequestUrl(request).searchParams.get(key)?.trim() || ''
 }
 
 function getFixturesPath(teamId, limit = 50, offset = 0) {
@@ -25,8 +32,8 @@ function getFixturesPath(teamId, limit = 50, offset = 0) {
 }
 
 function createEndpoint(request) {
-  const path = getPathParts(request.query.path)
-  const name = getQueryValue(request.query, 'name')
+  const path = getPathParts(request)
+  const name = getQueryValue(request, 'name')
 
   if (path.length === 1 && path[0] === 'teams') {
     if (!name) return { error: 'Indica el nombre del equipo.' }
@@ -34,7 +41,7 @@ function createEndpoint(request) {
   }
 
   if (path.length === 3 && path[0] === 'teams' && /^\d+$/.test(path[1]) && path[2] === 'squad') {
-    const policy = getQueryValue(request.query, 'context') === 'market' ? CACHE_POLICY.SQUAD_MARKET : CACHE_POLICY.SQUAD_NORMAL
+    const policy = getQueryValue(request, 'context') === 'market' ? CACHE_POLICY.SQUAD_MARKET : CACHE_POLICY.SQUAD_NORMAL
     return { path: `/teams/${path[1]}/squad/`, policy }
   }
 

@@ -4,15 +4,21 @@ const IMAGE_BASE_URL = 'https://sports.bzzoiro.com/img'
 const ALLOWED_TYPES = new Set(['team', 'player', 'league', 'manager', 'venue'])
 const ALLOWED_PARAMETERS = new Set(['bg', 'sor'])
 
-function getPathParts(path) {
-  if (Array.isArray(path)) return path
-  return typeof path === 'string' ? path.split('/') : []
+function getRequestUrl(request) {
+  const host = request.headers?.host || 'localhost'
+  return new URL(request.url || '/', `https://${host}`)
 }
 
-function getImageParameters(query) {
+function getPathParts(request) {
+  const pathname = getRequestUrl(request).pathname
+  const relativePath = pathname.replace(/^\/api\/sports-images\/?/, '')
+  return relativePath.split('/').filter(Boolean)
+}
+
+function getImageParameters(request) {
   const parameters = new URLSearchParams()
   ALLOWED_PARAMETERS.forEach((parameter) => {
-    const value = query?.[parameter]
+    const value = request.query?.[parameter] ?? getRequestUrl(request).searchParams.get(parameter)
     const normalizedValue = Array.isArray(value) ? value[0] : value
     if (typeof normalizedValue === 'string') parameters.set(parameter, normalizedValue)
   })
@@ -20,13 +26,13 @@ function getImageParameters(query) {
 }
 
 export default async function handler(request, response) {
-  const [type, id] = getPathParts(request.query.path)
+  const [type, id] = getPathParts(request)
   if (!ALLOWED_TYPES.has(type) || !/^\d+$/.test(id || '')) {
     response.status(400).json({ error: 'Ruta de imagen no válida.' })
     return
   }
 
-  const parameters = getImageParameters(request.query)
+  const parameters = getImageParameters(request)
   const sourceUrl = `${IMAGE_BASE_URL}/${type}/${id}/${parameters ? `?${parameters}` : ''}`
 
   try {
