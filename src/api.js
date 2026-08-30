@@ -17,7 +17,12 @@ const positionMap = {
 function getImageUrl(type, id, query = '') {
   // BSD redirige las rutas sin esta barra a /img/…; tras un proxy same-origin
   // esa redirección perdería el prefijo /api/sports-images.
-  return id ? `${IMAGE_BASE_URL}/${type}/${id}/${query}` : null
+  if (!id) return null
+  if (import.meta.env.DEV) return `${IMAGE_BASE_URL}/${type}/${id}/${query}`
+
+  const parameters = new URLSearchParams(query)
+  parameters.set('__lineup_path', `${type}/${id}`)
+  return `${IMAGE_BASE_URL}?${parameters.toString()}`
 }
 
 function getErrorMessage(payload) {
@@ -29,11 +34,20 @@ function getErrorMessage(payload) {
 }
 
 async function request(path) {
-  const response = await fetch(`/api/football${path}`)
+  const response = await fetch(getFootballUrl(path))
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) throw new Error(getErrorMessage(payload))
   return payload
+}
+
+function getFootballUrl(path) {
+  if (import.meta.env.DEV) return `/api/football${path}`
+
+  const [pathname, query = ''] = path.split('?')
+  const parameters = new URLSearchParams(query)
+  parameters.set('__lineup_path', pathname.replace(/^\/+/, ''))
+  return `/api/football?${parameters.toString()}`
 }
 
 function getResults(payload) {
