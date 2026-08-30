@@ -10,6 +10,11 @@ function getRequestUrl(request) {
 }
 
 function getPathParts(request) {
+  const rewrittenPath = request.query?.__lineup_path ?? getRequestUrl(request).searchParams.get('__lineup_path')
+  const normalizedRewrittenPath = Array.isArray(rewrittenPath) ? rewrittenPath[0] : rewrittenPath
+  if (typeof normalizedRewrittenPath === 'string' && normalizedRewrittenPath) {
+    return normalizedRewrittenPath.split('/').filter(Boolean)
+  }
   const pathname = getRequestUrl(request).pathname
   const relativePath = pathname.replace(/^\/api\/football\/?/, '')
   return relativePath.split('/').filter(Boolean)
