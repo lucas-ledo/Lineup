@@ -1,0 +1,27 @@
+.market-player-value, .player-facts, .player-value { display: block; margin-top: 4px; color: #9eb0a9; font: 8px/1.3 'DM Mono', monospace; }
+.market-player-value, .player-value { color: #c7df80; }
+.transfer-quote { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 8px; margin-top: 2px; padding-top: 7px; border-top: 1px solid rgba(231,245,227,.13); }
+.transfer-quote > div:not(.transfer-quote-actions) { min-width: 0; }
+.transfer-quote span { margin: 0; color: #9fb4ad; font: 8px 'DM Mono', monospace; }
+.transfer-quote b { display: block; overflow: hidden; margin-top: 2px; color: #edf5e9; font: 10px 'DM Sans', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-quote > strong { grid-column: 1 / -1; margin-top: 2px; color: #c9fa5b; font: 10px 'DM Mono', monospace; }
+.transfer-quote > small { grid-column: 1 / -1; color: #9eafa8; font-size: 8px; line-height: 1.35; }
+.transfer-quote-actions { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr 34px; gap: 5px; }
+.transfer-quote-actions button, .sale-editor > div button { min-height: 31px; border: 0; border-radius: 4px; color: #10251f; background: #c9fa5b; font: 9px 'DM Mono', monospace; }
+.transfer-quote-actions .cancel-price, .sale-editor > div button:last-child { color: #b7c8c1; background: rgba(231,245,227,.12); }
+.transfer-quote-actions button:disabled, .sale-editor > div button:disabled { cursor: not-allowed; opacity: .5; }
+.sale-editor { grid-template-columns: 1fr; margin-top: 2px; padding-top: 7px; border-top: 1px solid rgba(231,245,227,.13); }
+.sale-editor > strong { color: #e6bd75; font: 9px 'DM Mono', monospace; }
+.sale-editor > small { color: #9eafa8; font-size: 8px; line-height: 1.35; }
+.sale-editor > div { display: grid; grid-template-columns: 1fr 34px; gap: 5px; }
+.transfer-log-item span { white-space: normal; line-height: 1.3; }
+[data-theme='light'] .transfer-quote { border-color: #dce5da; }
+[data-theme='light'] .transfer-quote span, [data-theme='light'] .transfer-quote > small, [data-theme='light'] .sale-editor > small, [data-theme='light'] .player-facts { color: #63766e; }
+[data-theme='light'] .transfer-quote b { color: #21362f; }
+
+@media (max-width: 620px) {
+  .market-player-value, .player-facts, .player-value, .transfer-quote span, .transfer-quote > small, .sale-editor > strong, .sale-editor > small { font-size: 11px; }
+  .transfer-quote b, .transfer-quote > strong { font-size: 12px; }
+  .transfer-quote-actions button, .sale-editor > div button { min-height: 42px; font-size: 11px; }
+  .transfer-log-item span { font-size: 11px; }
+}

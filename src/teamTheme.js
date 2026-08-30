@@ -1,12 +1,15 @@
 const fallbackTheme = {
   primary: '#ef3a58',
+  secondary: '#ef3a58',
   soft: 'rgba(101, 21, 42, .38)',
   glow: 'rgba(239, 58, 88, .16)',
   onPrimary: '#ffffff',
+  onSecondary: '#ffffff',
 }
 
 export function applyClubTheme(theme) {
-  Object.entries(theme).forEach(([key, value]) => {
+  const cssTheme = Object.fromEntries(Object.entries(theme).filter(([key]) => key !== 'source'))
+  Object.entries(cssTheme).forEach(([key, value]) => {
     const cssVariable = `--club-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`
     document.documentElement.style.setProperty(cssVariable, value)
   })
@@ -22,6 +25,8 @@ const knownClubColors = {
   villarreal: '#fbe122',
   'real betis': '#00954c',
   'real sociedad': '#0067b1',
+  'deportivo de a coruna': '#0070b8',
+  'real club deportivo de a coruna': '#0070b8',
   osasuna: '#d71920',
   'manchester city': '#6cabdd',
   'manchester united': '#da291c',
@@ -56,38 +61,59 @@ const knownClubColors = {
 
 const hex = (value) => value.toString(16).padStart(2, '0')
 
-function toTheme(red, green, blue) {
+function getContrastColor(red, green, blue) {
   const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
+  return luminance > 0.62 ? '#10251f' : '#ffffff'
+}
+
+function toTheme(primary, secondary = primary) {
+  const [red, green, blue] = primary
+  const [secondaryRed, secondaryGreen, secondaryBlue] = secondary
   return {
     primary: `#${hex(red)}${hex(green)}${hex(blue)}`,
+    secondary: `#${hex(secondaryRed)}${hex(secondaryGreen)}${hex(secondaryBlue)}`,
     soft: `rgba(${red}, ${green}, ${blue}, .28)`,
     glow: `rgba(${red}, ${green}, ${blue}, .18)`,
-    onPrimary: luminance > 0.62 ? '#10251f' : '#ffffff',
+    onPrimary: getContrastColor(red, green, blue),
+    onSecondary: getContrastColor(secondaryRed, secondaryGreen, secondaryBlue),
   }
 }
 
-function themeFromHex(color) {
-  const normalized = color.replace('#', '')
-  return toTheme(
+function hexToRgb(color) {
+  if (typeof color !== 'string' || !/^#[\da-f]{6}$/i.test(color)) return null
+  const normalized = color.slice(1)
+  return [
     Number.parseInt(normalized.slice(0, 2), 16),
     Number.parseInt(normalized.slice(2, 4), 16),
     Number.parseInt(normalized.slice(4, 6), 16),
-  )
+  ]
+}
+
+function themeFromColors(primaryColor, secondaryColor) {
+  const primary = hexToRgb(primaryColor)
+  const secondary = hexToRgb(secondaryColor) || primary
+  return primary ? toTheme(primary, secondary) : null
+}
+
+function themeFromHex(color) {
+  return themeFromColors(color)
+}
+
+export function getKnownClubColor(teamName) {
+  const normalized = teamName?.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() || ''
+  return Object.entries(knownClubColors).find(([club]) => normalized === club || normalized.includes(club))?.[1] || null
 }
 
 function getKnownTheme(teamName) {
-  const normalized = teamName?.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() || ''
-  const color = Object.entries(knownClubColors).find(([club]) => normalized === club || normalized.includes(club))?.[1]
+  const color = getKnownClubColor(teamName)
   return color ? themeFromHex(color) : null
 }
 
-export async function getClubTheme(logoUrl, teamName) {
-  const knownTheme = getKnownTheme(teamName)
-  if (knownTheme) return knownTheme
-  // La Image API de BSD no habilita CORS, por lo que no se puede leer el píxel
-  // del escudo desde el navegador. Los clubes conocidos conservan su color real;
-  // el resto usa una paleta neutra hasta disponer de un color de perfil en la API.
-  return fallbackTheme
+export function getClubTheme(team) {
+  const apiTheme = themeFromColors(team?.colors?.primary, team?.colors?.secondary)
+  if (apiTheme) return apiTheme
+
+  return getKnownTheme(team?.name) || fallbackTheme
 }
 
 export { fallbackTheme }

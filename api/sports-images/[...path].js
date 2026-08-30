@@ -1,3 +1,5 @@
+import { applyCachePolicy, applyNoStore, CACHE_POLICY } from '../lib/cachePolicy.js'
+
 const IMAGE_BASE_URL = 'https://sports.bzzoiro.com/img'
 const ALLOWED_TYPES = new Set(['team', 'player', 'league', 'manager', 'venue'])
 const ALLOWED_PARAMETERS = new Set(['bg', 'sor'])
@@ -27,13 +29,19 @@ export default async function handler(request, response) {
 
   try {
     const upstream = await fetch(sourceUrl)
+    if (!upstream.ok) {
+      applyNoStore(response)
+      response.status(upstream.status).json({ error: 'La imagen deportiva no está disponible.' })
+      return
+    }
     const image = Buffer.from(await upstream.arrayBuffer())
     response.status(upstream.status)
     response.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/png')
-    response.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800')
+    applyCachePolicy(response, CACHE_POLICY.SPORTS_IMAGE)
     response.setHeader('Access-Control-Allow-Origin', '*')
     response.send(image)
   } catch {
+    applyNoStore(response)
     response.status(502).json({ error: 'No se pudo obtener la imagen deportiva.' })
   }
 }
