@@ -64,7 +64,7 @@ export function TransferMarket({
         <div><input id="market-search" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={mode === 'player' ? 'Ej. Lamine Yamal, Mbappé…' : 'Busca otro equipo…'} /><button type="submit" disabled={status.loading}>{status.loading ? '…' : 'Buscar'}</button></div>
       </form>
       {selectedTeam && <div className="market-club"><img src={selectedTeam.logo} alt="" /><span>Plantilla de {selectedTeam.name}</span><button onClick={onClearSelectedTeam} aria-label="Cerrar plantilla">×</button></div>}
-      {teams.length > 0 && <div className="market-teams">{teams.map((item) => <button key={item.team.id} onClick={() => onSelectTeam(item)}><img src={item.team.logo} alt="" />{item.team.name}</button>)}</div>}
+      {teams.length > 0 && <div className="market-teams">{teams.map((item) => <button key={item.team.id} onClick={() => onSelectTeam(item)}><img src={item.team.logo} alt="" /><span>{item.team.name}{item.team.isWomen && <b className="team-result__gender">Femenino</b>}</span></button>)}</div>}
       {status.message && <p className="market-notice">{status.message}</p>}
       {players.length > 0 && <div className="market-players">{players.map((player) => {
         const isAlreadyInRoster = roster.some((item) => item.id === player.id)

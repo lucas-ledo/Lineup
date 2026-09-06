@@ -4,6 +4,8 @@ const DAY = 24 * HOUR
 export const CACHE_POLICY = Object.freeze({
   TEAM: { name: 'team', ttl: 365 * DAY, staleWhileRevalidate: 30 * DAY },
   TEAM_THEME: { name: 'team-theme', ttl: 365 * DAY, staleWhileRevalidate: 30 * DAY },
+  TEAM_LATEST_LINEUP: { name: 'team-latest-lineup', ttl: 18 * HOUR, staleWhileRevalidate: 6 * HOUR },
+  TEAM_CATEGORY: { name: 'team-category', ttl: 30 * DAY, staleWhileRevalidate: 30 * DAY },
   TEAM_SEARCH: { name: 'team-search', ttl: 30 * DAY, staleWhileRevalidate: 7 * DAY },
   SQUAD_NORMAL: { name: 'squad-normal', ttl: 14 * DAY, staleWhileRevalidate: 7 * DAY },
   SQUAD_MARKET: { name: 'squad-market', ttl: DAY, staleWhileRevalidate: DAY },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { getSquad, getTeamTheme, searchTeams } from '../api'
+import { getLatestTeamLineup, getSquad, getTeamCompetitionCategory, getTeamTheme, searchTeams } from '../api'
 import { applyClubTheme, fallbackTheme, getClubTheme } from '../teamTheme'
 
 const TEAM_SEARCH_MIN_LENGTH = 2
@@ -12,15 +12,58 @@ export function useSquad() {
   const [pendingTeam, setPendingTeam] = useState(null)
   const [players, setPlayers] = useState([])
   const [positionFilter, setPositionFilter] = useState('All')
+  const [playerQuery, setPlayerQuery] = useState('')
   const [status, setStatus] = useState(emptyStatus)
+  const [searchStatus, setSearchStatus] = useState(emptyStatus)
   const [theme, setTheme] = useState(() => localStorage.getItem('lineup-theme') || 'dark')
   const [clubTheme, setClubTheme] = useState(fallbackTheme)
   const teamRequestRef = useRef(0)
+  const searchRequestRef = useRef(0)
 
-  const visiblePlayers = useMemo(
-    () => positionFilter === 'All' ? players : players.filter((player) => player.position === positionFilter),
-    [players, positionFilter],
-  )
+  const resolveTeamCategories = async (results) => {
+    const queue = results.filter((item) => !item.team.isWomen)
+    const categoriesByTeamId = new Map()
+    const resolveNext = async () => {
+      while (queue.length > 0) {
+        const item = queue.shift()
+        try {
+          const category = await getTeamCompetitionCategory(item.team.id)
+          if (category) categoriesByTeamId.set(item.team.id, category)
+        } catch {
+          // La búsqueda sigue siendo utilizable aunque un club no tenga partidos o categoría disponible.
+        }
+      }
+    }
+    await Promise.all([resolveNext(), resolveNext()])
+    return results.map((item) => {
+      const category = categoriesByTeamId.get(item.team.id)
+      return category
+        ? { ...item, team: { ...item.team, isWomen: category.isWomen, categoryResolved: true, leagueName: category.leagueName } }
+        : item
+    })
+  }
+
+  const visiblePlayers = useMemo(() => {
+    const normalizedQuery = playerQuery.trim().toLocaleLowerCase('es')
+    return players.filter((player) => {
+      const matchesPosition = positionFilter === 'All' || player.position === positionFilter
+      const matchesQuery = !normalizedQuery || player.name.toLocaleLowerCase('es').includes(normalizedQuery)
+      return matchesPosition && matchesQuery
+    })
+  }, [playerQuery, players, positionFilter])
+
+  const squadMetrics = useMemo(() => {
+    if (!players.length) return null
+    const ages = players.map((player) => player.age).filter((age) => typeof age === 'number')
+    const values = players.map((player) => player.marketValue).filter((value) => typeof value === 'number')
+    const averageAge = ages.length === players.length
+      ? ages.reduce((total, age) => total + age, 0) / players.length
+      : null
+    const totalValue = values.length === players.length
+      ? values.reduce((total, value) => total + value, 0)
+      : null
+    return averageAge === null && totalValue === null ? null : { averageAge, totalValue }
+  }, [players])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -46,37 +89,62 @@ export function useSquad() {
     return () => { isCurrent = false }
   }, [team?.id, team?.name, team?.clubTheme?.primary, team?.clubTheme?.secondary, team?.clubTheme?.source, team?.colors?.primary, team?.colors?.secondary, pendingTeam?.id])
 
-  const handleSearch = async (event) => {
-    event.preventDefault()
-    const searchTerm = query.trim()
-
+  const runTeamSearch = async (rawQuery) => {
+    const requestId = ++searchRequestRef.current
+    const searchTerm = rawQuery.trim()
     if (searchTerm.length < TEAM_SEARCH_MIN_LENGTH) {
-      setStatus({ loading: false, message: 'Escribe al menos dos letras para buscar un equipo.' })
+      setTeams([])
+      setSearchStatus(emptyStatus)
       return
     }
 
-    setStatus({ loading: true, message: '' })
+    setSearchStatus({ loading: true, message: '' })
     try {
       const results = await searchTeams(searchTerm)
-      setTeams(results.slice(0, 8))
-      setStatus({ loading: false, message: results.length ? '' : 'No encontramos ningún equipo con esa búsqueda.' })
+      if (requestId !== searchRequestRef.current) return
+      const categorizedResults = await resolveTeamCategories(results.slice(0, 8))
+      if (requestId !== searchRequestRef.current) return
+      setTeams(categorizedResults)
+      setSearchStatus({ loading: false, message: categorizedResults.length ? '' : 'No encontramos ningún equipo con esa búsqueda.' })
     } catch (error) {
-      setStatus({ loading: false, message: error.message })
+      if (requestId !== searchRequestRef.current) return
+      setSearchStatus({ loading: false, message: error.message })
     }
   }
 
-  const selectTeam = async (item, onTeamChange = () => {}) => {
+  useEffect(() => {
+    const searchTerm = query.trim()
+    searchRequestRef.current += 1
+    if (searchTerm.length < TEAM_SEARCH_MIN_LENGTH) {
+      setTeams([])
+      setSearchStatus(emptyStatus)
+      return undefined
+    }
+    setTeams([])
+    const timeout = window.setTimeout(() => { void runTeamSearch(searchTerm) }, 240)
+    return () => window.clearTimeout(timeout)
+  }, [query])
+
+  const handleSearch = (event) => {
+    event.preventDefault()
+    void runTeamSearch(query)
+  }
+
+  const selectTeam = async (item, { onTeamChange = () => {}, onTeamReady = () => {} } = {}) => {
     const nextTeam = item.team
     const requestId = ++teamRequestRef.current
+    searchRequestRef.current += 1
     setPendingTeam(nextTeam)
     setTeam(null)
     setTeams([])
     setPlayers([])
     setPositionFilter('All')
+    setPlayerQuery('')
     onTeamChange()
     setStatus({ loading: true, message: '' })
 
     try {
+      const latestLineupPromise = getLatestTeamLineup(nextTeam.id).catch(() => null)
       const [squad, fetchedTheme] = await Promise.all([
         getSquad(nextTeam.id, 'normal'),
         getTeamTheme(nextTeam.id).catch(() => null),
@@ -87,10 +155,14 @@ export function useSquad() {
       const resolvedTeam = { ...nextTeam, clubTheme: resolvedTheme }
       setClubTheme(resolvedTheme)
       applyClubTheme(resolvedTheme)
+      const resolvedPlayers = (squad.players || []).map((player) => ({ ...player, club: resolvedTeam }))
       setTeam(resolvedTeam)
-      setPlayers((squad.players || []).map((player) => ({ ...player, club: resolvedTeam })))
+      setPlayers(resolvedPlayers)
       setPendingTeam(null)
       setStatus({ loading: false, message: squad.players?.length ? '' : 'La API no devolvió jugadores para este equipo.' })
+      void latestLineupPromise.then((latestLineup) => {
+        if (requestId === teamRequestRef.current) onTeamReady({ team: resolvedTeam, players: resolvedPlayers, latestLineup })
+      })
     } catch (error) {
       if (requestId !== teamRequestRef.current) return
       setPendingTeam(null)
@@ -104,7 +176,22 @@ export function useSquad() {
     setTeam(null)
     setTeams([])
     setPlayers([])
+    setPlayerQuery('')
     onReset()
+  }
+
+  const restoreDraft = (draft) => {
+    if (!draft?.team?.id || !Array.isArray(draft.players)) return false
+    const restoredTeam = { ...draft.team, clubTheme: draft.team.clubTheme || getClubTheme(draft.team) }
+    setTeam(restoredTeam)
+    setPlayers(draft.players.map((player) => ({ ...player, club: player.club || restoredTeam })))
+    setPendingTeam(null)
+    setPositionFilter('All')
+    setPlayerQuery('')
+    setClubTheme(restoredTeam.clubTheme)
+    applyClubTheme(restoredTeam.clubTheme)
+    setStatus(emptyStatus)
+    return true
   }
 
   return {
@@ -115,17 +202,22 @@ export function useSquad() {
     isTeamLoading: Boolean(pendingTeam),
     players,
     positionFilter,
+    playerQuery,
     status,
+    searchStatus,
     theme,
     clubTheme,
     visiblePlayers,
+    squadMetrics,
     setQuery,
     setPlayers,
     setPositionFilter,
+    setPlayerQuery,
     setStatus,
     setTheme,
     handleSearch,
     selectTeam,
     resetTeamContext,
+    restoreDraft,
   }
 }

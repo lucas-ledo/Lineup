@@ -30,13 +30,14 @@ export const ShareLineupCard = forwardRef(function ShareLineupCard({ team, forma
   }
 
   return <section ref={ref} className="share-lineup-card" style={colors} aria-hidden="true">
-    <header className="share-card__header"><div className="share-card__brand"><span>LINEUP</span><b>XI</b></div><span>ALINEACIÓN OFICIAL</span></header>
+    <header className="share-card__header"><div className="share-card__brand"><span>LINEUP</span><b>XI</b></div><span>TU ALINEACIÓN</span></header>
     <section className="share-card__club">
       {team?.logo && <img src={team.logo} crossOrigin="anonymous" alt="" />}
       <div><p>CLUB</p><h1>{team?.name || 'Tu club'}</h1><span>{formation} · ONCE TITULAR</span></div>
       <div className="share-card__color"><i /><small>COLORES DEL CLUB</small></div>
     </section>
     <section className="share-card__pitch">
+      <div className="share-card__pitch-atmosphere" />
       <div className="share-card__pitch-lines" />
       {slots.map((slot) => <div key={slot.id} className="share-card__slot" style={{ left: `${slot.x}%`, top: `${slot.y}%` }}><SharePlayer player={starters[slot.id]} slot={slot} /></div>)}
     </section>

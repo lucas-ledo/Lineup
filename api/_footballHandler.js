@@ -3,6 +3,7 @@ import { getKitColors, resolveTeamTheme } from './lib/teamTheme.js'
 import { getClubColorsFromWikidata } from './lib/wikidata.js'
 
 const BASE_URL = 'https://sports.bzzoiro.com/api/v2'
+const LATEST_LINEUP_FIXTURE_LIMIT = 8
 
 function getRequestUrl(request) {
   const host = request.headers?.host || 'localhost'
@@ -39,6 +40,11 @@ function getFixturesPath(teamId, limit = 50, offset = 0) {
   return `/teams/${teamId}/fixtures/?date_from=${dateFrom}&date_to=${dateTo}&limit=${limit}&offset=${offset}`
 }
 
+function getLatestLineupEventsPath(teamId) {
+  const today = new Date().toISOString().slice(0, 10)
+  return `/events/?team_id=${teamId}&status=finished&date_to=${today}&limit=${LATEST_LINEUP_FIXTURE_LIMIT}`
+}
+
 function createEndpoint(request) {
   const path = getPathParts(request)
   const name = getQueryValue(request, 'name')
@@ -59,6 +65,14 @@ function createEndpoint(request) {
 
   if (path.length === 3 && path[0] === 'teams' && /^\d+$/.test(path[1]) && path[2] === 'theme') {
     return { kind: 'theme', teamId: path[1], policy: CACHE_POLICY.TEAM_THEME }
+  }
+
+  if (path.length === 3 && path[0] === 'teams' && /^\d+$/.test(path[1]) && path[2] === 'latest-lineup') {
+    return { kind: 'latest-lineup', teamId: path[1], policy: CACHE_POLICY.TEAM_LATEST_LINEUP }
+  }
+
+  if (path.length === 3 && path[0] === 'teams' && /^\d+$/.test(path[1]) && path[2] === 'category') {
+    return { kind: 'team-category', teamId: path[1], policy: CACHE_POLICY.TEAM_CATEGORY }
   }
 
   if (path.length === 2 && path[0] === 'teams' && /^\d+$/.test(path[1])) {
@@ -115,6 +129,61 @@ function getEventDate(event) {
   const value = event?.event_date ?? event?.start_time ?? event?.scheduled_at ?? event?.kickoff ?? event?.date
   const date = value ? new Date(value) : null
   return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0
+}
+
+function getLineupSide(lineups, teamId) {
+  const normalizedTeamId = String(teamId)
+  return Object.values(lineups || {}).find((lineup) => String(lineup?.team_id) === normalizedTeamId) || null
+}
+
+async function getLatestConfirmedLineup(teamId, apiKey) {
+  const eventsPayload = await fetchBsd(getLatestLineupEventsPath(teamId), apiKey)
+  const events = getResults(eventsPayload)
+    .filter((event) => event?.status === 'finished' && (event.id ?? event.event_id))
+    .sort((left, right) => getEventDate(right) - getEventDate(left))
+    .slice(0, LATEST_LINEUP_FIXTURE_LIMIT)
+
+  for (const event of events) {
+    const eventId = event.id ?? event.event_id
+    const payload = await fetchBsd(`/events/${eventId}/lineups/`, apiKey)
+    const lineup = payload?.lineup_status === 'confirmed' ? getLineupSide(payload.lineups, teamId) : null
+
+    if (lineup?.players?.length === 11) {
+      return {
+        teamId: Number(teamId),
+        matchId: eventId,
+        formation: lineup.formation || null,
+        players: lineup.players,
+        fetchedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + CACHE_POLICY.TEAM_LATEST_LINEUP.ttl * 1000).toISOString(),
+      }
+    }
+  }
+
+  return null
+}
+
+async function getTeamCompetitionCategory(teamId, apiKey) {
+  const fixtureSummary = await fetchBsd(getFixturesPath(teamId, 1), apiKey)
+  const totalFixtures = Number(fixtureSummary?.count) || 0
+  const fixturesPayload = totalFixtures > 1
+    ? await fetchBsd(getFixturesPath(teamId, 12, Math.max(totalFixtures - 12, 0)), apiKey)
+    : fixtureSummary
+  const latestFixture = getResults(fixturesPayload)
+    .filter((event) => event?.league_id)
+    .sort((left, right) => getEventDate(right) - getEventDate(left))[0]
+
+  if (!latestFixture?.league_id) return null
+
+  const league = await fetchBsd(`/leagues/${latestFixture.league_id}/`, apiKey)
+  return {
+    teamId: Number(teamId),
+    leagueId: latestFixture.league_id,
+    leagueName: league?.name || null,
+    isWomen: league?.is_women === true,
+    resolvedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + CACHE_POLICY.TEAM_CATEGORY.ttl * 1000).toISOString(),
+  }
 }
 
 async function getThemeKitColors(teamId, apiKey) {
@@ -180,7 +249,11 @@ export default async function handler(request, response) {
   try {
     const payload = endpoint.kind === 'theme'
       ? await getProcessedTheme(endpoint.teamId, apiKey)
-      : await fetchBsd(endpoint.path, apiKey)
+      : endpoint.kind === 'latest-lineup'
+        ? await getLatestConfirmedLineup(endpoint.teamId, apiKey)
+        : endpoint.kind === 'team-category'
+          ? await getTeamCompetitionCategory(endpoint.teamId, apiKey)
+        : await fetchBsd(endpoint.path, apiKey)
     applyCachePolicy(response, endpoint.policy)
     response.status(200).json(payload)
   } catch (error) {

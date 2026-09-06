@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { getPlayerProfile, getSquad, searchPlayers, searchTeams } from '../api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getPlayerProfile, getSquad, getTeamCompetitionCategory, searchPlayers, searchTeams } from '../api'
 import { euro } from '../utils/formatters'
 import { getTransferQuote } from '../utils/transferValues'
 import { emptyStatus } from './useSquad'
@@ -26,6 +26,30 @@ export function useTransfers({ team, players, setPlayers, clearPlayer, setStatus
   const [saleDraft, setSaleDraft] = useState(null)
   const [signings, setSignings] = useState([])
   const [sales, setSales] = useState([])
+  const marketSearchRequestRef = useRef(0)
+
+  const resolveMarketTeamCategories = async (results) => {
+    const queue = results.filter((item) => !item.team.isWomen)
+    const categoriesByTeamId = new Map()
+    const resolveNext = async () => {
+      while (queue.length > 0) {
+        const item = queue.shift()
+        try {
+          const category = await getTeamCompetitionCategory(item.team.id)
+          if (category) categoriesByTeamId.set(item.team.id, category)
+        } catch {
+          // Si falta historial de partidos, el resultado sigue siendo seleccionable.
+        }
+      }
+    }
+    await Promise.all([resolveNext(), resolveNext()])
+    return results.map((item) => {
+      const category = categoriesByTeamId.get(item.team.id)
+      return category
+        ? { ...item, team: { ...item.team, isWomen: category.isWomen, categoryResolved: true, leagueName: category.leagueName } }
+        : item
+    })
+  }
 
   const spend = signings.reduce((total, item) => total + item.price, 0)
   const income = sales.reduce((total, item) => total + item.price, 0)
@@ -44,26 +68,30 @@ export function useTransfers({ team, players, setPlayers, clearPlayer, setStatus
   }
 
   const changeMarketMode = (nextMode) => {
+    marketSearchRequestRef.current += 1
     setMarketMode(nextMode)
     setMarketPlayers([])
     setMarketTeams([])
     setMarketTeam(null)
   }
 
-  const handleMarketSearch = async (event) => {
-    event.preventDefault()
-    const searchTerm = marketQuery.trim()
-    const minimumCharacters = marketMode === 'player' ? PLAYER_SEARCH_MIN_LENGTH : TEAM_SEARCH_MIN_LENGTH
+  const runMarketSearch = async (rawQuery, mode = marketMode) => {
+    const requestId = ++marketSearchRequestRef.current
+    const searchTerm = rawQuery.trim()
+    const minimumCharacters = mode === 'player' ? PLAYER_SEARCH_MIN_LENGTH : TEAM_SEARCH_MIN_LENGTH
 
     if (searchTerm.length < minimumCharacters) {
-      setMarketStatus({ loading: false, message: `Escribe al menos ${minimumCharacters} letras para buscar ${marketMode === 'player' ? 'un jugador' : 'otro equipo'}.` })
+      setMarketPlayers([])
+      setMarketTeams([])
+      setMarketStatus(emptyStatus)
       return
     }
 
     setMarketStatus({ loading: true, message: '' })
     try {
-      if (marketMode === 'player') {
+      if (mode === 'player') {
         const results = await searchPlayers(searchTerm)
+        if (requestId !== marketSearchRequestRef.current) return
         setMarketPlayers(results)
         setMarketTeams([])
         setMarketTeam(null)
@@ -72,14 +100,41 @@ export function useTransfers({ team, players, setPlayers, clearPlayer, setStatus
       }
 
       const results = await searchTeams(searchTerm)
-      setMarketTeams(results.filter((item) => item.team.id !== team?.id).slice(0, 6))
-      setMarketStatus({ loading: false, message: results.length ? '' : 'No encontramos equipos para ese mercado.' })
+      if (requestId !== marketSearchRequestRef.current) return
+      const availableTeams = results.filter((item) => item.team.id !== team?.id).slice(0, 6)
+      const categorizedTeams = await resolveMarketTeamCategories(availableTeams)
+      if (requestId !== marketSearchRequestRef.current) return
+      setMarketTeams(categorizedTeams)
+      setMarketStatus({ loading: false, message: categorizedTeams.length ? '' : 'No encontramos equipos para ese mercado.' })
     } catch (error) {
+      if (requestId !== marketSearchRequestRef.current) return
       setMarketStatus({ loading: false, message: error.message })
     }
   }
 
+  useEffect(() => {
+    if (!marketOpen) return undefined
+    const searchTerm = marketQuery.trim()
+    const minimumCharacters = marketMode === 'player' ? PLAYER_SEARCH_MIN_LENGTH : TEAM_SEARCH_MIN_LENGTH
+    marketSearchRequestRef.current += 1
+    if (searchTerm.length < minimumCharacters) {
+      setMarketPlayers([])
+      setMarketTeams([])
+      return undefined
+    }
+    setMarketPlayers([])
+    setMarketTeams([])
+    const timeout = window.setTimeout(() => { void runMarketSearch(searchTerm, marketMode) }, 240)
+    return () => window.clearTimeout(timeout)
+  }, [marketOpen, marketMode, marketQuery, team?.id])
+
+  const handleMarketSearch = (event) => {
+    event.preventDefault()
+    void runMarketSearch(marketQuery)
+  }
+
   const selectMarketTeam = async (item) => {
+    marketSearchRequestRef.current += 1
     const nextTeam = item.team
     setMarketTeam(nextTeam)
     setMarketTeams([])
@@ -130,12 +185,12 @@ export function useTransfers({ team, players, setPlayers, clearPlayer, setStatus
     if (signingDraft?.loading || !signingDraft?.player || !signingQuote.available) {
       setMarketStatus({ loading: false, message: 'Indica un importe de fichaje válido en euros.' })
       setMarketStatus({ loading: false, message: 'No podemos calcular un coste automático sin valor de mercado o cláusula.' })
-      return
+      return null
     }
     const player = signingDraft.player
     if (players.some((item) => item.id === player.id)) {
       setMarketStatus({ loading: false, message: 'Ese jugador ya forma parte de tu plantilla.' })
-      return
+      return null
     }
     const signedPlayer = { ...player, originClub: player.club }
     const transfer = { id: `signing-${player.id}-${Date.now()}`, player: signedPlayer, price, marketValue: signingQuote.marketValue, releaseClause: signingQuote.releaseClause, contractYears: signingQuote.contractYears, quoteSource: signingQuote.source, createdAt: Date.now() }
@@ -143,6 +198,7 @@ export function useTransfers({ team, players, setPlayers, clearPlayer, setStatus
     setSignings((current) => [...current, transfer])
     setSigningDraft(null)
     setMarketStatus({ loading: false, message: `${player.name} se incorpora por ${euro.format(price)}.` })
+    return signedPlayer
   }
 
   const confirmSale = () => {

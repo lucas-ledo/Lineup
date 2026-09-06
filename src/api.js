@@ -6,12 +6,38 @@ const IMAGE_BASE_URL = '/api/sports-images'
 // Cambiar esta revisión cuando varíe el cálculo del tema; la respuesta se
 // mantiene un año en la CDN por diseño.
 const TEAM_THEME_API_VERSION = 4
+const TEAM_SEARCH_CACHE_LIMIT = 30
+const teamSearchCache = new Map()
+const teamCategoryCache = new Map()
 
 const positionMap = {
   G: 'Goalkeeper',
   D: 'Defender',
   M: 'Midfielder',
   F: 'Attacker',
+}
+
+// Desempate editorial cuando el feed no ofrece popularidad ni valor de club.
+// No sustituye datos del proveedor: solo evita que filiales y juveniles aparezcan
+// antes que la entidad principal en una búsqueda ambigua.
+const popularTeamIdentities = [
+  'real madrid', 'fc barcelona', 'futbol club barcelona', 'atletico de madrid',
+  'athletic club', 'sevilla fc', 'valencia cf', 'real betis', 'villarreal',
+  'manchester united', 'manchester city', 'liverpool', 'arsenal', 'chelsea',
+  'tottenham', 'bayern munich', 'borussia dortmund', 'juventus', 'ac milan',
+  'inter milan', 'paris saint germain', 'psg', 'ajax', 'benfica', 'porto',
+  'flamengo', 'palmeiras', 'boca juniors', 'river plate',
+]
+
+function cachePromise(cache, key, load, limit = TEAM_SEARCH_CACHE_LIMIT) {
+  if (cache.has(key)) return cache.get(key)
+  if (cache.size >= limit) cache.delete(cache.keys().next().value)
+  const pending = load()
+  cache.set(key, pending)
+  pending.catch(() => {
+    if (cache.get(key) === pending) cache.delete(key)
+  })
+  return pending
 }
 
 function getImageUrl(type, id, query = '') {
@@ -70,7 +96,56 @@ function normalizeTeam(team) {
     id,
     name: team.name || team.short_name || 'Equipo sin nombre',
     logo: getImageUrl('team', id, '?bg=transparent'),
+    isWomen: isWomenTeam(team),
   }
+}
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es')
+}
+
+function isWomenTeam(team) {
+  const category = [
+    team.gender,
+    team.team_gender,
+    team.sex,
+    team.category?.gender,
+    team.competition?.gender,
+    team.name,
+    team.short_name,
+  ].filter(Boolean).join(' ')
+  const normalized = normalizeSearchText(category)
+  return /\b(women|womens|female|femenin[oa]?|femeni|ladies|damen|frauen|wfc)\b/.test(normalized)
+    || /(?:\s|-|\()w\)?$/.test(normalized)
+}
+
+function numericTeamSignal(team, keys) {
+  const value = firstValue(...keys.map((key) => team[key]))
+  return parseMonetaryValue(value) ?? 0
+}
+
+function getTeamSearchScore(team, query) {
+  const name = normalizeSearchText(team.name || team.short_name)
+  const term = normalizeSearchText(query).trim()
+  const explicitPopularity = numericTeamSignal(team, ['popularity', 'popularity_score', 'followers', 'fan_count', 'ranking', 'rank'])
+  const marketValue = numericTeamSignal(team, ['market_value_eur', 'market_value', 'marketValue', 'estimated_value', 'transfer_value'])
+  const exactName = name === term || normalizeSearchText(team.short_name) === term
+  const startsWithQuery = name.startsWith(term)
+  const isYouthOrReserve = /\b(u(?:1[0-9]|2[0-3])|juvenil|reserves?|filial|b|ii|iii)\b/.test(name) || name.includes('barcelona atletic')
+  const seniorSignal = team.venue_id ? 16 : 0
+  const editorialPopularity = !isYouthOrReserve && popularTeamIdentities.some((identity) => name.includes(identity)) ? 150 : 0
+
+  // El proveedor no envía estos valores hoy, pero se usarán automáticamente
+  // si aparecen en la respuesta sin obligarnos a cambiar la interfaz.
+  return (exactName ? 140 : startsWithQuery ? 90 : name.includes(term) ? 50 : 0)
+    + seniorSignal
+    + editorialPopularity
+    + Math.min(100, Math.log10(explicitPopularity + 1) * 12)
+    + Math.min(80, Math.log10(marketValue + 1) * 8)
+    - (isYouthOrReserve ? 70 : 0)
 }
 
 function normalizePosition(position) {
@@ -270,12 +345,54 @@ function normalizePlayer(player, fallbackClub = null) {
 }
 
 export async function searchTeams(query) {
-  const payload = await request(`/teams?name=${encodeURIComponent(query)}`)
-  return getResults(payload).map((team) => ({
-    team: normalizeTeam(team),
-    venue: team.venue ? { name: team.venue.name } : null,
-    country: team.country?.name || team.country_name || team.country_code || '',
-  }))
+  const searchTerm = query.trim()
+  const cacheKey = normalizeSearchText(searchTerm)
+  return cachePromise(teamSearchCache, cacheKey, async () => {
+    const payload = await request(`/teams?name=${encodeURIComponent(searchTerm)}`)
+    return getResults(payload).map((team) => ({
+      team: normalizeTeam(team),
+      venue: team.venue ? { name: team.venue.name } : null,
+      country: team.country?.name || team.country_name || team.country_code || '',
+      searchScore: getTeamSearchScore(team, searchTerm),
+    })).sort((left, right) => right.searchScore - left.searchScore || left.team.name.localeCompare(right.team.name, 'es'))
+  })
+}
+
+export function getTeamCompetitionCategory(teamId) {
+  const cacheKey = String(teamId)
+  return cachePromise(teamCategoryCache, cacheKey, () => requestTeamCompetitionCategory(teamId), 80)
+}
+
+async function requestTeamCompetitionCategory(teamId) {
+  if (import.meta.env.DEV) return getTeamCompetitionCategoryFromProvider(teamId)
+  const payload = await request(`/teams/${teamId}/category`)
+  if (!payload || typeof payload.isWomen !== 'boolean') return null
+  return {
+    teamId: payload.teamId ?? Number(teamId),
+    leagueId: payload.leagueId ?? null,
+    leagueName: payload.leagueName ?? null,
+    isWomen: payload.isWomen,
+  }
+}
+
+async function getTeamCompetitionCategoryFromProvider(teamId) {
+  const fixtureSummary = await request(`/teams/${teamId}/fixtures?${getRecentFixturesQuery(1)}`)
+  const totalFixtures = Number(fixtureSummary?.count) || 0
+  const fixturesPayload = totalFixtures > 1
+    ? await request(`/teams/${teamId}/fixtures?${getRecentFixturesQuery(12, Math.max(totalFixtures - 12, 0))}`)
+    : fixtureSummary
+  const latestFixture = getResults(fixturesPayload)
+    .filter((event) => event?.league_id)
+    .sort((left, right) => getEventDate(right) - getEventDate(left))[0]
+  if (!latestFixture?.league_id) return null
+
+  const league = await request(`/leagues/${latestFixture.league_id}`)
+  return {
+    teamId: Number(teamId),
+    leagueId: latestFixture.league_id,
+    leagueName: league?.name || null,
+    isWomen: league?.is_women === true,
+  }
 }
 
 export async function getTeamProfile(teamId) {
@@ -334,6 +451,51 @@ export async function getSquad(teamId, context = 'normal') {
   const payload = await request(`/teams/${teamId}/squad?context=${normalizedContext}`)
   const players = getResults(payload).map((player) => normalizePlayer(player))
   return { players }
+}
+
+export async function getLatestTeamLineup(teamId) {
+  if (import.meta.env.DEV) return getLatestTeamLineupFromProvider(teamId)
+
+  const payload = await request(`/teams/${teamId}/latest-lineup`)
+  return normalizeLatestTeamLineup(payload)
+}
+
+function normalizeLatestTeamLineup(payload) {
+  if (!payload?.players?.length) return null
+
+  return {
+    teamId: payload.teamId,
+    matchId: payload.matchId,
+    formation: payload.formation,
+    fetchedAt: payload.fetchedAt,
+    expiresAt: payload.expiresAt,
+    players: payload.players.map((player) => normalizePlayer(player)),
+  }
+}
+
+async function getLatestTeamLineupFromProvider(teamId) {
+  const today = new Date().toISOString().slice(0, 10)
+  const payload = await request(`/events?team_id=${teamId}&status=finished&date_to=${today}&limit=8`)
+  const events = getResults(payload)
+    .filter((event) => event?.status === 'finished' && (event.id ?? event.event_id))
+    .sort((left, right) => getEventDate(right) - getEventDate(left))
+    .slice(0, 8)
+
+  for (const event of events) {
+    const matchId = event.id ?? event.event_id
+    const lineups = await request(`/events/${matchId}/lineups`)
+    const side = Object.values(lineups?.lineups || {}).find((lineup) => String(lineup?.team_id) === String(teamId))
+    if (lineups?.lineup_status === 'confirmed' && side?.players?.length === 11) {
+      return normalizeLatestTeamLineup({
+        teamId: Number(teamId),
+        matchId,
+        formation: side.formation || null,
+        players: side.players,
+      })
+    }
+  }
+
+  return null
 }
 
 export async function searchPlayers(query) {

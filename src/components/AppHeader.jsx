@@ -20,9 +20,9 @@ export function AppHeader({ team, startersCount, subsCount, theme, onThemeChange
     <section className="hero">
       <div className="hero-rail" aria-hidden="true"><span>LINEUP LAB</span><b>01</b></div>
       <div className="hero-copy">
-        <p className="eyebrow">TABLERO DE DECISIONES / OPERATIVO</p>
-        <h1>Elige.<br /><em>Mueve.</em><br />Cierra.</h1>
-        <p className="hero-text">Una mesa para probar tu convocatoria antes de que el partido empiece.</p>
+        <p className="eyebrow">TU IDEA / TU ONCE / EN UN MINUTO</p>
+        <h1>Tu idea.<br /><em>Tu XI.</em><br />Comparte.</h1>
+        <p className="hero-text">Elige un club, parte de su último once y deja tu alineación lista para compartir.</p>
       </div>
       <div className={`hero-club ${team ? '' : 'hero-club--empty'}`}>
         <div className="hero-club-heading"><span>{team ? 'CLUB EN MESA' : 'PUNTO DE PARTIDA'}</span><b>{team ? 'ACTIVO' : '00'}</b></div>
