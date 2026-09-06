@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formations } from '../data'
+import { LineupType, MAX_BENCH_PLAYERS, createLineup, getSelectedPlayerIds, hydrateLineup, toLineupDraft, withPlayerPool } from '../domain/lineup'
 import { emptyStatus } from './useSquad'
 
-const MAX_BENCH_PLAYERS = 11
+function idOf(player) {
+  return player?.id === null || player?.id === undefined ? null : String(player.id)
+}
 
 function placePlayersInFormation(players, formation) {
   const availableSlots = [...formations[formation]]
@@ -12,27 +15,28 @@ function placePlayersInFormation(players, formation) {
     const matchingSlotIndex = availableSlots.findIndex((slot) => slot.kind === player.position)
     const slotIndex = matchingSlotIndex >= 0 ? matchingSlotIndex : 0
     const [slot] = availableSlots.splice(slotIndex, 1)
-    if (slot) starters[slot.id] = player
+    const playerId = idOf(player)
+    if (slot && playerId) starters[slot.id] = { playerId }
   })
 
   return starters
 }
 
-function uniqueBenchPlayers(benchPlayers, starters) {
-  const starterIds = new Set(Object.values(starters).filter(Boolean).map((player) => String(player.id)))
-  const seenIds = new Set()
-  return benchPlayers.filter((player) => {
-    const id = String(player.id)
-    if (starterIds.has(id) || seenIds.has(id)) return false
-    seenIds.add(id)
-    return true
+function normalizeLegacyDraft(draft, fallback = {}) {
+  return createLineup({
+    type: fallback.type || LineupType.CURRENT_TEAM,
+    context: fallback.context || null,
+    title: fallback.title || '',
+    formation: draft.formation,
+    playerPool: fallback.players || [],
+    starters: draft.starters,
+    bench: draft.subs,
+    metadata: fallback.metadata,
   })
 }
 
 export function useLineup({ players, setStatus }) {
-  const [formation, setFormation] = useState('4-3-3')
-  const [starters, setStarters] = useState({})
-  const [subs, setSubs] = useState([])
+  const [lineup, setLineup] = useState(() => createLineup({ type: LineupType.CURRENT_TEAM }))
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [selectedPlayerSlot, setSelectedPlayerSlot] = useState(null)
   const [recentPlayerId, setRecentPlayerId] = useState(null)
@@ -43,94 +47,87 @@ export function useLineup({ players, setStatus }) {
   const isPristineRef = useRef(true)
   const recentPlayerTimeoutRef = useRef(null)
 
-  const slots = formations[formation]
-  const startersCount = Object.values(starters).filter(Boolean).length
-  const assignedIds = useMemo(
-    () => new Set([...Object.values(starters), ...subs].filter(Boolean).map((player) => player.id)),
-    [starters, subs],
-  )
+  const sourcePlayers = useMemo(() => new Map(players.map((player) => [String(player.id), player])), [players])
+  const hydrated = useMemo(() => hydrateLineup(lineup, players), [lineup, players])
+  const slots = formations[lineup.formation]
+  const starters = hydrated.starters
+  const subs = hydrated.bench
+  const startersCount = Object.keys(starters).length
+  const assignedIds = useMemo(() => new Set(getSelectedPlayerIds(lineup).map((id) => sourcePlayers.get(id)?.id ?? id)), [lineup, sourcePlayers])
 
   useEffect(() => {
-    setSubs((current) => {
-      const normalized = uniqueBenchPlayers(current, starters)
-      return normalized.length === current.length ? current : normalized
-    })
-  }, [starters])
+    setLineup((current) => withPlayerPool(current, players))
+  }, [players])
+
+  const updateLineup = (updater) => setLineup((current) => createLineup(updater(current)))
+  const clearInteraction = () => {
+    setSelectedSlot(null)
+    setSelectedPlayerSlot(null)
+  }
 
   const resetLineup = () => {
     isPristineRef.current = false
-    setStarters({})
-    setSubs([])
-    setSelectedSlot(null)
-    setSelectedPlayerSlot(null)
+    updateLineup((current) => ({ ...current, starters: {}, bench: [] }))
+    clearInteraction()
     setStatus(emptyStatus)
   }
 
-  const beginNewTeamLineup = () => {
+  const beginLineup = ({ type = LineupType.CUSTOM, context = null, players: playerPool = players, formation } = {}) => {
     isPristineRef.current = true
-    setStarters({})
-    setSubs([])
-    setSelectedSlot(null)
-    setSelectedPlayerSlot(null)
+    setLineup(createLineup({ type, context, playerPool, formation }))
+    clearInteraction()
     setStatus(emptyStatus)
   }
 
-  const restoreDraft = (draft) => {
-    if (!draft || !formations[draft.formation]) return false
-    const validSlotIds = new Set(formations[draft.formation].map((slot) => slot.id))
-    const usedIds = new Set()
-    const restoredStarters = Object.entries(draft.starters || {}).reduce((next, [slotId, player]) => {
-      if (!validSlotIds.has(slotId) || !player?.id || usedIds.has(String(player.id))) return next
-      usedIds.add(String(player.id))
-      next[slotId] = player
-      return next
-    }, {})
-    setFormation(draft.formation)
-    setStarters(restoredStarters)
-    setSubs(uniqueBenchPlayers(Array.isArray(draft.subs) ? draft.subs : [], restoredStarters))
-    setSelectedSlot(null)
-    setSelectedPlayerSlot(null)
+  const beginNewTeamLineup = ({ context = null, players: playerPool = players } = {}) => {
+    beginLineup({ type: LineupType.CURRENT_TEAM, context, players: playerPool })
+  }
+
+  const restoreDraft = (draft, fallback = {}) => {
+    if (!draft) return false
+    const restored = draft.version === 2
+      ? createLineup({ ...draft, playerPool: draft.playerPool?.length ? draft.playerPool : fallback.players })
+      : normalizeLegacyDraft(draft, fallback)
+    if (!formations[restored.formation]) return false
+    const validSlotIds = new Set(formations[restored.formation].map((slot) => slot.id))
+    const starters = Object.fromEntries(Object.entries(restored.starters).filter(([slotId]) => validSlotIds.has(slotId)))
+    setLineup(createLineup({ ...restored, starters }))
+    clearInteraction()
     isPristineRef.current = false
     return true
   }
 
   const applySuggestedLineup = (suggestion, availablePlayers = players) => {
     if (!isPristineRef.current || !suggestion?.players?.length) return false
-
-    const nextFormation = formations[suggestion.formation] ? suggestion.formation : formation
+    const formation = formations[suggestion.formation] ? suggestion.formation : lineup.formation
     const playersById = new Map(availablePlayers.map((player) => [String(player.id), player]))
-    const nextStarters = placePlayersInFormation(
-      suggestion.players.map((suggestedPlayer) => playersById.get(String(suggestedPlayer.id)) || suggestedPlayer),
-      nextFormation,
-    )
+    const placedPlayers = suggestion.players.map((player) => playersById.get(String(player.id)) || player)
+    const starters = placePlayersInFormation(placedPlayers, formation)
+    if (Object.keys(starters).length !== 11) return false
 
-    if (Object.keys(nextStarters).length !== 11) return false
-    setFormation(nextFormation)
-    setStarters(nextStarters)
-    setSubs([])
-    setSelectedSlot(null)
-    setSelectedPlayerSlot(null)
+    updateLineup((current) => ({ ...current, formation, starters, bench: [], playerPool: [...current.playerPool, ...placedPlayers] }))
+    clearInteraction()
     const hasProviderFormation = Boolean(suggestion.formation && formations[suggestion.formation])
     setStatus({ loading: false, message: `Hemos cargado el último XI oficial disponible${hasProviderFormation ? ` (${suggestion.formation})` : ''}.` })
     return true
   }
 
-  const updateFormation = (nextFormation) => {
-    if (nextFormation === formation) return
+  const updateFormation = (formation) => {
+    if (formation === lineup.formation || !formations[formation]) return
     isPristineRef.current = false
-    const nextStarters = placePlayersInFormation(Object.values(starters), nextFormation)
-    setFormation(nextFormation)
-    setStarters(nextStarters)
-    setSubs((current) => uniqueBenchPlayers(current, nextStarters))
-    setSelectedSlot(null)
-    setSelectedPlayerSlot(null)
+    updateLineup((current) => ({ ...current, formation, starters: placePlayersInFormation(Object.values(hydrateLineup(current, players).starters), formation) }))
+    clearInteraction()
     setStatus(emptyStatus)
   }
 
   const clearPlayer = (playerId) => {
+    const normalizedId = String(playerId)
     isPristineRef.current = false
-    setStarters((current) => Object.fromEntries(Object.entries(current).map(([slotId, player]) => [slotId, player?.id === playerId ? null : player])))
-    setSubs((current) => current.filter((player) => player.id !== playerId))
+    updateLineup((current) => ({
+      ...current,
+      starters: Object.fromEntries(Object.entries(current.starters).filter(([, entry]) => entry.playerId !== normalizedId)),
+      bench: current.bench.filter((entry) => entry.playerId !== normalizedId),
+    }))
     setSelectedPlayerSlot(null)
   }
 
@@ -139,33 +136,32 @@ export function useLineup({ players, setStatus }) {
       setSelectedSlot(slotId)
       return
     }
-
-    const selectedPlayer = starters[selectedSlot]
-    if (!selectedPlayer) {
+    if (!lineup.starters[selectedSlot]) {
       setSelectedSlot(slotId)
       return
     }
 
-    // Alternativa táctil al drag & drop: tocar un titular y después otra plaza
-    // lo mueve o intercambia con el jugador que ya estuviera allí.
     isPristineRef.current = false
-    setStarters((current) => ({
-      ...current,
-      [selectedSlot]: current[slotId] || null,
-      [slotId]: current[selectedSlot],
-    }))
-    setSelectedSlot(null)
-    setSelectedPlayerSlot(null)
+    updateLineup((current) => {
+      const selected = current.starters[selectedSlot]
+      const target = current.starters[slotId]
+      const starters = { ...current.starters, [slotId]: { ...selected, slotId } }
+      if (target) starters[selectedSlot] = { ...target, slotId: selectedSlot }
+      else delete starters[selectedSlot]
+      return { ...current, starters }
+    })
+    clearInteraction()
     setStatus(emptyStatus)
   }
 
   const addToStarting = (player, requestedSlotId = null) => {
+    const playerId = idOf(player)
+    if (!playerId) return
     const target = requestedSlotId
       ? slots.find((slot) => slot.id === requestedSlotId)
       : selectedSlot
         ? slots.find((slot) => slot.id === selectedSlot)
-        : slots.find((slot) => slot.kind === player.position && !starters[slot.id]) || slots.find((slot) => !starters[slot.id])
-
+        : slots.find((slot) => slot.kind === player.position && !lineup.starters[slot.id]) || slots.find((slot) => !lineup.starters[slot.id])
     if (!target) {
       setStatus({ loading: false, message: 'Tu once ya está completo. Quita un jugador para hacer sitio.' })
       return
@@ -175,67 +171,56 @@ export function useLineup({ players, setStatus }) {
     setRecentPlayerId(player.id)
     window.clearTimeout(recentPlayerTimeoutRef.current)
     recentPlayerTimeoutRef.current = window.setTimeout(() => setRecentPlayerId(null), 850)
+    updateLineup((current) => {
+      const sourceSlotId = Object.entries(current.starters).find(([, entry]) => entry.playerId === playerId)?.[0]
+      const replaced = current.starters[target.id]
+      const benchIndex = current.bench.findIndex((entry) => entry.playerId === playerId)
+      if (sourceSlotId === target.id) return current
 
-    const sourceSlotId = Object.entries(starters).find(([, starter]) => starter?.id === player.id)?.[0]
-    const replacedPlayer = starters[target.id]
-    const benchIndex = subs.findIndex((item) => item.id === player.id)
-
-    if (sourceSlotId === target.id) {
-      setSelectedSlot(null)
-      return
-    }
-
-    setStarters((current) => {
-      const currentSourceSlotId = Object.entries(current).find(([, starter]) => starter?.id === player.id)?.[0]
-      const currentReplacedPlayer = current[target.id]
-
-      if (currentSourceSlotId) {
-        return { ...current, [currentSourceSlotId]: currentReplacedPlayer || null, [target.id]: player }
+      const starters = { ...current.starters, [target.id]: { playerId, slotId: target.id, role: 'starter' } }
+      if (sourceSlotId) {
+        if (replaced) starters[sourceSlotId] = { ...replaced, slotId: sourceSlotId }
+        else delete starters[sourceSlotId]
       }
-
-      return { ...current, [target.id]: player }
-    })
-
-    setSubs((current) => {
-      const currentBenchIndex = current.findIndex((item) => item.id === player.id)
-      if (currentBenchIndex >= 0) {
-        // Un suplente que entra conserva el tamaño del banquillo: el titular
-        // sustituido ocupa su plaza. Si el destino estaba vacío, simplemente sale.
-        return replacedPlayer
-          ? current.map((item, index) => index === currentBenchIndex ? replacedPlayer : item)
-          : current.filter((_, index) => index !== currentBenchIndex)
+      let bench = current.bench
+      if (benchIndex >= 0) {
+        bench = replaced
+          ? current.bench.map((entry, index) => index === benchIndex ? { playerId: replaced.playerId } : entry)
+          : current.bench.filter((_, index) => index !== benchIndex)
+      } else if (replaced && current.bench.length < MAX_BENCH_PLAYERS) {
+        bench = [...current.bench, { playerId: replaced.playerId }]
       }
-
-      // Al elegir desde la plantilla, el titular sustituido queda disponible en
-      // el banquillo cuando todavía hay hueco; nunca bloqueamos la colocación.
-      return replacedPlayer && current.length < MAX_BENCH_PLAYERS ? [...current, replacedPlayer] : current
+      return { ...current, starters, bench, playerPool: [...current.playerPool, playerId] }
     })
-
-    setSelectedSlot(null)
-    setSelectedPlayerSlot(null)
+    clearInteraction()
     setStatus(emptyStatus)
   }
 
   const addToBench = (player) => {
-    if (assignedIds.has(player.id)) return
-    if (subs.length >= MAX_BENCH_PLAYERS) {
+    const playerId = idOf(player)
+    if (!playerId || getSelectedPlayerIds(lineup).includes(playerId)) return
+    if (lineup.bench.length >= MAX_BENCH_PLAYERS) {
       setStatus({ loading: false, message: 'El banquillo ya tiene sus 11 suplentes.' })
       return
     }
     isPristineRef.current = false
-    setSubs((current) => [...current, player])
+    updateLineup((current) => ({ ...current, bench: [...current.bench, { playerId }], playerPool: [...current.playerPool, playerId] }))
     setStatus(emptyStatus)
   }
 
   const moveToBench = (player) => {
-    if (subs.some((item) => item.id === player.id)) return
-    if (subs.length >= MAX_BENCH_PLAYERS) {
+    const playerId = idOf(player)
+    if (!playerId || lineup.bench.some((entry) => entry.playerId === playerId)) return
+    if (lineup.bench.length >= MAX_BENCH_PLAYERS) {
       setStatus({ loading: false, message: 'El banquillo ya tiene sus 11 suplentes.' })
       return
     }
     isPristineRef.current = false
-    setStarters((current) => Object.fromEntries(Object.entries(current).map(([slotId, starter]) => [slotId, starter?.id === player.id ? null : starter])))
-    setSubs((current) => [...current, player])
+    updateLineup((current) => ({
+      ...current,
+      starters: Object.fromEntries(Object.entries(current.starters).filter(([, entry]) => entry.playerId !== playerId)),
+      bench: [...current.bench, { playerId }],
+    }))
     setStatus(emptyStatus)
   }
 
@@ -248,7 +233,7 @@ export function useLineup({ players, setStatus }) {
 
   const getDraggedPlayer = (event) => {
     const playerId = event.dataTransfer.getData('application/x-lineup-player') || event.dataTransfer.getData('text/plain')
-    return players.find((player) => String(player.id) === playerId) || draggedPlayer
+    return sourcePlayers.get(String(playerId)) || draggedPlayer
   }
 
   const dropOnSlot = (event, slotId) => {
@@ -295,7 +280,8 @@ export function useLineup({ players, setStatus }) {
   }
 
   return {
-    formation,
+    lineup,
+    formation: lineup.formation,
     slots,
     starters,
     subs,
@@ -310,6 +296,7 @@ export function useLineup({ players, setStatus }) {
     openPlayerActions: (slotId) => setSelectedPlayerSlot(slotId),
     closePlayerActions: () => setSelectedPlayerSlot(null),
     resetLineup,
+    beginLineup,
     beginNewTeamLineup,
     restoreDraft,
     applySuggestedLineup,
@@ -326,5 +313,7 @@ export function useLineup({ players, setStatus }) {
     endTouchMove,
     shouldSuppressTap: () => suppressTapRef.current,
     allowDrop: (event) => event.preventDefault(),
+    syncPlayerPool: () => setLineup((current) => withPlayerPool(current, players)),
+    toDraft: () => toLineupDraft(lineup),
   }
 }

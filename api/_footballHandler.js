@@ -80,6 +80,10 @@ function createEndpoint(request) {
   }
 
   if (path.length === 1 && path[0] === 'players') {
+    const nationalTeamId = getQueryValue(request, 'national_team_id')
+    if (nationalTeamId && /^\d+$/.test(nationalTeamId)) {
+      return { path: `/players/?national_team_id=${nationalTeamId}&limit=50`, policy: CACHE_POLICY.NATIONAL_TEAM_PLAYERS }
+    }
     if (!name) return { error: 'Indica el nombre del jugador.' }
     return { path: `/players/?name=${encodeURIComponent(name)}&limit=20`, policy: CACHE_POLICY.PLAYER_SEARCH }
   }

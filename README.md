@@ -1,5 +1,11 @@
 # Lineup Lab
 
+## Modelo de alineación
+
+El editor usa un único modelo `Lineup` (`src/domain/lineup.js`): `type`, `context` opcional, `formation`, `playerPool`, `starters` y `bench`. `Player` mantiene los datos del proveedor; un participante de la alineación solo guarda `playerId`, rol y, para titulares, `slotId`. Una alineación no depende de un `teamId` y puede representar club actual, creación libre, selección o futuros históricos.
+
+Los modos activos son equipo actual, creación desde cero, selección/convocatoria y XI histórico libre. BSD mantiene el flujo actual; TheSportsDB alimenta la búsqueda de leyendas, con fichas, imágenes y el historial jugador → ex-equipos. El listado de jugadores por equipo de TheSportsDB es actual, no histórico, por lo que `historical-club` continúa sin implementar. El filtro de país acota los resultados ya devueltos por la búsqueda histórica; no representa un censo completo por país.
+
 Aplicación React para crear un once titular y 11 suplentes a partir de la plantilla actual de un club. Incluye mercado de fichajes, ventas, arrastrar y soltar, temas claro/oscuro y exportación de la alineación como imagen.
 
 ## Puesta en marcha

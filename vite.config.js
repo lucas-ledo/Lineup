@@ -34,6 +34,16 @@ export default defineConfig(({ mode }) => {
           headers: apiKey ? { Authorization: `Token ${apiKey}` } : undefined,
           rewrite: rewriteFootballPath,
         },
+        '/api/historical': {
+          target: 'https://www.thesportsdb.com',
+          changeOrigin: true,
+          rewrite: (path) => {
+            const parameters = new URLSearchParams(path.split('?')[1] || '')
+            return parameters.get('playerId')
+              ? `/api/v1/json/123/lookupformerteams.php?id=${encodeURIComponent(parameters.get('playerId'))}`
+              : `/api/v1/json/123/searchplayers.php?p=${encodeURIComponent(parameters.get('name') || '')}`
+          },
+        },
       },
     },
   }

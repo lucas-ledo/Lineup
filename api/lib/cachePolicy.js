@@ -11,6 +11,7 @@ export const CACHE_POLICY = Object.freeze({
   SQUAD_MARKET: { name: 'squad-market', ttl: DAY, staleWhileRevalidate: DAY },
   PLAYER: { name: 'player', ttl: 7 * DAY, staleWhileRevalidate: DAY },
   PLAYER_SEARCH: { name: 'player-search', ttl: DAY, staleWhileRevalidate: DAY },
+  NATIONAL_TEAM_PLAYERS: { name: 'national-team-players', ttl: DAY, staleWhileRevalidate: DAY },
   TRANSFERS: { name: 'transfers', ttl: 12 * HOUR, staleWhileRevalidate: DAY },
   SPORTS_IMAGE: { name: 'sports-image', ttl: 30 * DAY, staleWhileRevalidate: 7 * DAY },
 })
