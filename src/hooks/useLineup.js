@@ -43,6 +43,9 @@ export function useLineup({ players, setStatus }) {
   const [draggedPlayer, setDraggedPlayer] = useState(null)
   const [touchDrag, setTouchDrag] = useState(null)
   const touchSessionRef = useRef(null)
+  const dragScrollFrameRef = useRef(null)
+  const dragScrollVelocityRef = useRef(0)
+  const dragPointerRef = useRef(null)
   const suppressTapRef = useRef(false)
   const isPristineRef = useRef(true)
   const recentPlayerTimeoutRef = useRef(null)
@@ -157,6 +160,10 @@ export function useLineup({ players, setStatus }) {
   const addToStarting = (player, requestedSlotId = null) => {
     const playerId = idOf(player)
     if (!playerId) return
+    if (player.position === 'Unknown' && !requestedSlotId && !selectedSlot) {
+      setStatus({ loading: false, message: `Elige primero una posición para colocar a ${player.name}.` })
+      return
+    }
     const target = requestedSlotId
       ? slots.find((slot) => slot.id === requestedSlotId)
       : selectedSlot
@@ -251,32 +258,79 @@ export function useLineup({ players, setStatus }) {
   }
 
   const beginTouchMove = (event, player) => {
-    if (event.pointerType !== 'touch') return
+    if (event.button !== undefined && event.button !== 0) return
+    const interactive = event.target.closest?.('button, summary, details, input, select, a')
+    if (interactive && interactive !== event.currentTarget) return
     touchSessionRef.current = { player, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false }
     event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  const updatePointerDrag = (player, x, y) => {
+    const dropTarget = document.elementFromPoint(x, y)?.closest('[data-slot-id], [data-drop-zone="bench"]')
+    setTouchDrag({
+      player,
+      x,
+      y,
+      overSlotId: dropTarget?.dataset.slotId || null,
+      overBench: dropTarget?.dataset.dropZone === 'bench',
+    })
+  }
+
+  const runDragAutoScroll = () => {
+    if (!touchSessionRef.current?.moved || !dragScrollVelocityRef.current || !dragPointerRef.current) {
+      dragScrollFrameRef.current = null
+      return
+    }
+    window.scrollBy(0, dragScrollVelocityRef.current)
+    updatePointerDrag(touchSessionRef.current.player, dragPointerRef.current.x, dragPointerRef.current.y)
+    dragScrollFrameRef.current = window.requestAnimationFrame(runDragAutoScroll)
+  }
+
+  const stopDragAutoScroll = () => {
+    dragScrollVelocityRef.current = 0
+    dragPointerRef.current = null
+    if (dragScrollFrameRef.current) window.cancelAnimationFrame(dragScrollFrameRef.current)
+    dragScrollFrameRef.current = null
   }
 
   const moveTouchPlayer = (event) => {
     const session = touchSessionRef.current
     if (!session || session.pointerId !== event.pointerId) return
-    if (!session.moved && Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 8) session.moved = true
+    if (!session.moved && Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 4) {
+      session.moved = true
+      document.body.classList.add('is-lineup-dragging')
+    }
     if (session.moved) {
       event.preventDefault()
-      setTouchDrag({ player: session.player, x: event.clientX, y: event.clientY })
+      dragPointerRef.current = { x: event.clientX, y: event.clientY }
+      updatePointerDrag(session.player, event.clientX, event.clientY)
+      const edge = 72
+      const distanceTop = event.clientY
+      const distanceBottom = window.innerHeight - event.clientY
+      dragScrollVelocityRef.current = distanceTop < edge
+        ? -Math.ceil((edge - distanceTop) / 5)
+        : distanceBottom < edge
+          ? Math.ceil((edge - distanceBottom) / 5)
+          : 0
+      if (dragScrollVelocityRef.current && !dragScrollFrameRef.current) dragScrollFrameRef.current = window.requestAnimationFrame(runDragAutoScroll)
+      if (!dragScrollVelocityRef.current && dragScrollFrameRef.current) stopDragAutoScroll()
     }
   }
 
   const endTouchMove = (event) => {
     const session = touchSessionRef.current
     if (!session || session.pointerId !== event.pointerId) return
-    if (session.moved) {
+    if (session.moved && event.type !== 'pointercancel') {
       const slotElement = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-slot-id]')
       if (slotElement?.dataset.slotId) addToStarting(session.player, slotElement.dataset.slotId)
+      else if (document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-drop-zone="bench"]')) moveToBench(session.player)
       suppressTapRef.current = true
-      window.setTimeout(() => { suppressTapRef.current = false }, 0)
+      window.setTimeout(() => { suppressTapRef.current = false }, 300)
     }
     touchSessionRef.current = null
     setTouchDrag(null)
+    stopDragAutoScroll()
+    document.body.classList.remove('is-lineup-dragging')
   }
 
   return {

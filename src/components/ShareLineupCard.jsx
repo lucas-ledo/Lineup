@@ -22,7 +22,7 @@ function ShareSub({ player, index }) {
   </div>
 }
 
-export const ShareLineupCard = forwardRef(function ShareLineupCard({ team, formation, slots, starters, subs, clubTheme }, ref) {
+export const ShareLineupCard = forwardRef(function ShareLineupCard({ team, title, formation, slots, starters, subs, clubTheme }, ref) {
   const colors = {
     '--share-primary': clubTheme.primary,
     '--share-on-primary': clubTheme.onPrimary,
@@ -33,7 +33,7 @@ export const ShareLineupCard = forwardRef(function ShareLineupCard({ team, forma
     <header className="share-card__header"><div className="share-card__brand"><span>LINEUP</span><b>XI</b></div><span>TU ALINEACIÓN</span></header>
     <section className="share-card__club">
       {team?.logo && <img src={team.logo} crossOrigin="anonymous" alt="" />}
-      <div><p>CLUB</p><h1>{team?.name || 'Tu club'}</h1><span>{formation} · ONCE TITULAR</span></div>
+      <div><p>{team ? 'CLUB' : 'ALINEACIÓN'}</p><h1>{title || team?.name || 'Mi alineación'}</h1><span>{formation} · ONCE TITULAR</span></div>
       <div className="share-card__color"><i /><small>COLORES DEL CLUB</small></div>
     </section>
     <section className="share-card__pitch">

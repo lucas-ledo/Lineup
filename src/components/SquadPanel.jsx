@@ -4,6 +4,7 @@ import { formatValue } from '../utils/transferValues'
 import { Avatar } from './Avatar'
 
 function SquadPanelView({
+  children,
   team,
   players,
   visiblePlayers,
@@ -18,23 +19,31 @@ function SquadPanelView({
   onFilterChange,
   onPlayerQueryChange,
   onResetLineup,
+  onClearFilters,
   onAddToStarting,
   onAddToBench,
   onDragStart,
   onDragEnd,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
   onStartSale,
   onCancelSale,
   onConfirmSale,
 }) {
   const hasLineup = assignedIds.size > 0
 
-  return <aside className="squad-panel">
-    <div className="panel-heading"><div><p className="eyebrow">{team ? team.name.toUpperCase() : 'PLANTILLA'}</p><h2>Jugadores <span>{players.length ? `${visiblePlayers.length}/${players.length}` : '—'}</span></h2></div><button className="text-button" onClick={onResetLineup} disabled={!hasLineup}>Limpiar</button></div>
-    {squadMetrics && <div className="squad-metrics" aria-label="Resumen de plantilla">{squadMetrics.totalValue !== null && <span><small>VALOR TOTAL</small><b>{formatValue(squadMetrics.totalValue)}</b></span>}{squadMetrics.averageAge !== null && <span><small>EDAD MEDIA</small><b>{squadMetrics.averageAge.toLocaleString('es-ES', { maximumFractionDigits: 1 })} años</b></span>}</div>}
-    {team && players.length > 0 && <div className="squad-controls"><input className="squad-player-search" value={playerQuery} onChange={(event) => onPlayerQueryChange(event.target.value)} placeholder="Buscar en plantilla" aria-label="Buscar en plantilla" /><div className="position-filters" aria-label="Filtrar jugadores por posición">{[['All', 'Todos'], ...Object.entries(positionNames)].map(([value, label]) => <button key={value} className={positionFilter === value ? 'is-active' : ''} onClick={() => onFilterChange(value)}>{label}</button>)}</div></div>}
-    {!team && <div className="empty-state"><span>⚽</span><h3>Empieza por un equipo</h3><p>Busca arriba para cargar su plantilla actual desde la API.</p></div>}
-    {team && isLoading && <div className="empty-state"><span className="loader" /><h3>Cargando plantilla</h3><p>Estamos preparando los jugadores disponibles.</p></div>}
-    {team && !isLoading && players.length > 0 && <div className="player-list">{visiblePlayers.map((player) => {
+  return <section className="lineup-squad-panel">
+    <div className="lineup-pool-heading"><div><p>EL VESTUARIO</p><h2>¿Quién juega?</h2><span>{team ? 'Arrastra una tarjeta al campo o usa el botón +.' : 'Elige un club para consultar su plantilla.'}</span></div><details className="lineup-roster-menu"><summary aria-label="Opciones del vestuario">•••</summary><div>{squadMetrics && squadMetrics.totalValue !== null && <span>Valor {formatValue(squadMetrics.totalValue)}</span>}{squadMetrics && squadMetrics.averageAge !== null && <span>Edad {squadMetrics.averageAge.toLocaleString('es-ES', { maximumFractionDigits: 1 })}</span>}<button onClick={onClearFilters} disabled={!playerQuery && positionFilter === 'All'}>Limpiar filtros</button><button onClick={onResetLineup} disabled={!hasLineup}>Vaciar alineación</button></div></details></div>
+    {children}
+    {team && players.length > 0 && <div className="lineup-squad-controls"><label htmlFor="squad-player-search">⌕</label><input id="squad-player-search" value={playerQuery} onChange={(event) => onPlayerQueryChange(event.target.value)} placeholder="Buscar un jugador…" aria-label="Buscar en plantilla" /><kbd>/</kbd></div>}
+    {team && players.length > 0 && <div className="lineup-position-filters" aria-label="Filtrar jugadores por posición">{[['All', 'Todos'], ...Object.entries(positionNames)].map(([value, label]) => <button key={value} className={positionFilter === value ? 'is-active' : ''} onClick={() => onFilterChange(value)}>{value === 'All' ? label : label.slice(0, 3).toUpperCase()}</button>)}</div>}
+    {team && players.length > 0 && <div className="lineup-results-count"><span>{visiblePlayers.length} RESULTADOS</span><span>ARRASTRA O AÑADE</span></div>}
+    {!team && <div className="lineup-empty-state"><span>⚽</span><h3>Empieza por un equipo</h3><p>Busca arriba para cargar su plantilla actual desde la API.</p></div>}
+    {team && isLoading && <div className="lineup-empty-state"><span className="loader" /><h3>Cargando plantilla</h3><p>Estamos preparando los jugadores disponibles.</p></div>}
+    {team && !isLoading && players.length > 0 && visiblePlayers.length === 0 && <div className="lineup-empty-state"><span>⚽</span><h3>Sin resultados</h3><p>No hay jugadores que coincidan con la búsqueda y los filtros actuales.</p><button onClick={onClearFilters}>Limpiar filtros</button></div>}
+    {team && !isLoading && players.length > 0 && visiblePlayers.length > 0 && <div className="lineup-player-list">{visiblePlayers.map((player) => {
       const isUsed = assignedIds.has(player.id)
       const playerLocation = Object.values(starters).some((item) => item?.id === player.id) ? 'Titular' : 'Suplente'
       const isEditingSale = saleDraft?.player.id === player.id
@@ -44,18 +53,22 @@ function SquadPanelView({
       ].filter(Boolean)
       const hasValuation = typeof player.marketValue === 'number' || typeof player.releaseClause === 'number'
 
-      return <article className={`player-card ${isUsed ? 'player-card--used' : ''}`} key={player.id} draggable onDragStart={(event) => onDragStart(event, player)} onDragEnd={onDragEnd}>
-        <div className="player-portrait"><Avatar player={player} /><img className="club-crest" src={player.club?.logo || team.logo} alt={`Escudo de ${player.club?.name || team.name}`} /></div>
-        <div className="player-info"><strong>{player.name}</strong><div className="player-meta"><span className="position-pill">{positionNames[player.position] || player.position}</span><span className="number-pill">#{player.number ?? '—'}</span></div>{playerFacts.length > 0 && <small className="player-facts">{playerFacts.join(' · ')}</small>}{hasValuation && <small className="player-value">VM {formatValue(player.marketValue)}{typeof player.releaseClause === 'number' ? ` · Cláusula ${formatValue(player.releaseClause)}` : ''}</small>}</div>
-        {isUsed ? <span className="added-label">{playerLocation}</span> : <div className="player-actions"><button onClick={() => onAddToStarting(player)} aria-label={`Añadir a ${player.name} al once`}>XI</button><button onClick={() => onAddToBench(player)} aria-label={`Añadir a ${player.name} al banquillo`}>Suplente</button></div>}
-        {isEditingSale ? <div className="sale-editor" aria-live="polite"><strong>{saleDraft.loading ? 'Calculando…' : `${saleQuote.label}: ${formatValue(saleQuote.amount)}`}</strong><small>VM {formatValue(saleQuote.marketValue)}{saleQuote.releaseClause !== null ? ` · Cláusula ${formatValue(saleQuote.releaseClause)}` : ''}{saleQuote.contractYears !== null ? ` · ${saleQuote.contractYears === 0 ? 'Contrato vencido' : `${saleQuote.contractYears} años de contrato`}` : ''}</small><small>{!saleDraft.loading && saleQuote.detail}</small><div><button disabled={saleDraft.loading || !saleQuote.available} onClick={onConfirmSale}>Confirmar venta</button><button onClick={onCancelSale} aria-label="Cancelar venta">×</button></div></div> : <button className="sale-trigger" onClick={() => onStartSale(player)}>Vender</button>}
+      return <article className={`lineup-player-card ${isUsed ? 'is-used' : ''}`} data-number={String(player.number ?? '').padStart(2, '0')} key={player.id} onPointerDown={(event) => onPointerDown?.(event, player)} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}>
+        <span className="lineup-player-card__position">{player.position === 'Goalkeeper' ? 'POR' : player.position === 'Defender' ? 'DEF' : player.position === 'Midfielder' ? 'MED' : 'DEL'}</span>
+        <div className="lineup-player-card__portrait"><Avatar player={player} /></div>
+        <div className="lineup-player-card__copy"><strong>{player.name}</strong>{playerFacts.length > 0 && <small>{playerFacts.join(' · ')}</small>}{hasValuation && <small>VM {formatValue(player.marketValue)}</small>}</div>
+        {isUsed ? <span className="lineup-player-card__added" aria-label={playerLocation}>✓</span> : <button className="lineup-player-card__add" onClick={() => onAddToStarting(player)} aria-label={`Añadir a ${player.name} al once`}>+</button>}
+        <details className="lineup-player-card__menu"><summary aria-label={`Más acciones para ${player.name}`}>⠿</summary><div>{!isUsed && <button onClick={() => onAddToBench(player)}>Añadir al banquillo</button>}<button onClick={() => onStartSale(player)}>Vender</button></div></details>
+        {isEditingSale && <div className="lineup-sale-editor" aria-live="polite"><strong>{saleDraft.loading ? 'Calculando…' : `${saleQuote.label}: ${formatValue(saleQuote.amount)}`}</strong><small>{!saleDraft.loading && saleQuote.detail}</small><div><button disabled={saleDraft.loading || !saleQuote.available} onClick={onConfirmSale}>Confirmar</button><button onClick={onCancelSale}>Cancelar</button></div></div>}
       </article>
-    })}{visiblePlayers.length === 0 && <p className="no-filter-results">No hay jugadores de esta posición en la plantilla.</p>}</div>}
-  </aside>
+    })}</div>}
+    {team && <div className="lineup-source-note">Una nueva piel para LineUp.<br /><span>Plantilla conectada a datos reales; el diseño mantiene la lectura editorial.</span></div>}
+  </section>
 }
 
 function sameSquadPanelProps(previous, next) {
-  return previous.team === next.team
+  return previous.children === next.children
+    && previous.team === next.team
     && previous.players === next.players
     && previous.visiblePlayers === next.visiblePlayers
     && previous.positionFilter === next.positionFilter

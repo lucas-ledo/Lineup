@@ -15,7 +15,7 @@ export function useSquad() {
   const [playerQuery, setPlayerQuery] = useState('')
   const [status, setStatus] = useState(emptyStatus)
   const [searchStatus, setSearchStatus] = useState(emptyStatus)
-  const [theme, setTheme] = useState(() => localStorage.getItem('lineup-theme') || 'dark')
+  const [theme, setTheme] = useState(() => localStorage.getItem('lineup-theme') || 'light')
   const [clubTheme, setClubTheme] = useState(fallbackTheme)
   const teamRequestRef = useRef(0)
   const searchRequestRef = useRef(0)
@@ -44,10 +44,11 @@ export function useSquad() {
   }
 
   const visiblePlayers = useMemo(() => {
-    const normalizedQuery = playerQuery.trim().toLocaleLowerCase('es')
+    const normalizedQuery = playerQuery.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es')
     return players.filter((player) => {
       const matchesPosition = positionFilter === 'All' || player.position === positionFilter
-      const matchesQuery = !normalizedQuery || player.name.toLocaleLowerCase('es').includes(normalizedQuery)
+      const normalizedName = player.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es')
+      const matchesQuery = !normalizedQuery || normalizedName.includes(normalizedQuery)
       return matchesPosition && matchesQuery
     })
   }, [playerQuery, players, positionFilter])

@@ -322,7 +322,7 @@ function normalizeDate(value) {
 
 function normalizePlayer(player, fallbackClub = null) {
   const teamId = player.team?.id ?? player.team_id ?? player.current_team_id
-  const teamName = player.team?.name ?? player.team_name ?? player.current_team_name
+  const teamName = player.team?.name ?? player.team_name ?? player.current_team?.name ?? player.current_team_name
   const club = teamId ? {
     id: teamId,
     name: teamName || 'Club actual',
@@ -513,43 +513,6 @@ export async function searchPlayers(query) {
 export async function getNationalTeamPlayers(nationalTeamId) {
   const payload = await request(`/players?national_team_id=${encodeURIComponent(nationalTeamId)}&limit=50`)
   return getResults(payload).map((player) => normalizePlayer(player))
-}
-
-function normalizeHistoricalPosition(position) {
-  const value = String(position || '').toLocaleLowerCase('en')
-  if (value.includes('goalkeeper') || value.includes('keeper')) return 'Goalkeeper'
-  if (value.includes('back') || value.includes('defend')) return 'Defender'
-  if (value.includes('midfield') || value.includes('winger')) return 'Midfielder'
-  if (value.includes('forward') || value.includes('striker') || value.includes('attacking')) return 'Attacker'
-  return 'Unknown'
-}
-
-export async function searchHistoricalPlayers(query) {
-  const response = await fetch(`/api/historical?name=${encodeURIComponent(query.trim())}`)
-  const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(getErrorMessage(payload))
-  return (payload?.player || []).filter((player) => player.strSport === 'Soccer').map((player) => ({
-    id: `tsdb-${player.idPlayer}`,
-    source: 'the-sports-db',
-    externalId: String(player.idPlayer),
-    name: player.strPlayer || 'Jugador sin nombre',
-    photo: player.strCutout || player.strThumb || null,
-    position: normalizeHistoricalPosition(player.strPosition),
-    number: null,
-    club: player.idTeam ? { id: `tsdb-team-${player.idTeam}`, name: player.strTeam || 'Equipo histórico', logo: null } : null,
-    nationality: player.strNationality || null,
-    age: null,
-    marketValue: null,
-    contractEnd: null,
-    historical: { status: player.strStatus || null, formerTeamsAvailable: true },
-  }))
-}
-
-export async function getHistoricalFormerTeams(playerId) {
-  const response = await fetch(`/api/historical?playerId=${encodeURIComponent(playerId)}`)
-  const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(getErrorMessage(payload))
-  return (payload?.formerteams || []).map((team) => ({ name: team.strFormerTeam, joined: team.strJoined, departed: team.strDeparted, type: team.strMoveType }))
 }
 
 export async function getPlayerProfile(playerId) {

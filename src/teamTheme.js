@@ -1,6 +1,7 @@
 const fallbackTheme = {
   primary: '#ef3a58',
   secondary: '#ef3a58',
+  ink: '#ef3a58',
   soft: 'rgba(101, 21, 42, .38)',
   glow: 'rgba(239, 58, 88, .16)',
   onPrimary: '#ffffff',
@@ -72,6 +73,7 @@ function toTheme(primary, secondary = primary) {
   return {
     primary: `#${hex(red)}${hex(green)}${hex(blue)}`,
     secondary: `#${hex(secondaryRed)}${hex(secondaryGreen)}${hex(secondaryBlue)}`,
+    ink: `#${hex(red)}${hex(green)}${hex(blue)}`,
     soft: `rgba(${red}, ${green}, ${blue}, .28)`,
     glow: `rgba(${red}, ${green}, ${blue}, .18)`,
     onPrimary: getContrastColor(red, green, blue),
@@ -114,6 +116,10 @@ export function getClubTheme(team) {
   if (apiTheme) return apiTheme
 
   return getKnownTheme(team?.name) || fallbackTheme
+}
+
+export function getEditorialTheme(team) {
+  return getClubTheme(team)
 }
 
 export { fallbackTheme }

@@ -2,9 +2,6 @@ export const LineupType = Object.freeze({
   CURRENT_TEAM: 'current-team',
   CUSTOM: 'custom',
   NATIONAL_TEAM: 'national-team',
-  HISTORICAL_CLUB: 'historical-club',
-  HISTORICAL_COUNTRY: 'historical-country',
-  HISTORICAL_FREE: 'historical-free',
 })
 
 export const ReferenceContextType = Object.freeze({

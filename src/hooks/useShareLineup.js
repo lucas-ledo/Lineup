@@ -14,18 +14,22 @@ async function waitForCaptureImages(container) {
   await Promise.all([...container.querySelectorAll('img')].map(waitForImageLoad))
 }
 
-export function useShareLineup({ team, formation, starters, subs, clubTheme, setStatus }) {
+export function useShareLineup({ team, title, formation, starters, subs, clubTheme, setStatus }) {
   const [isSharing, setIsSharing] = useState(false)
   const [shareFile, setShareFile] = useState(null)
   const shareCardRef = useRef(null)
 
   useEffect(() => {
     setShareFile(null)
-  }, [team?.id, formation, starters, subs])
+  }, [team?.id, title, formation, starters, subs])
 
   const shareLineup = async () => {
-    if (!team || !shareCardRef.current) {
-      setStatus({ loading: false, message: 'Selecciona un equipo antes de crear la imagen.' })
+    if (!shareCardRef.current) {
+      setStatus({ loading: false, message: 'No se pudo preparar la imagen.' })
+      return
+    }
+    if (!Object.keys(starters).length && !subs.length) {
+      setStatus({ loading: false, message: 'Añade al menos un titular o suplente antes de crear la imagen.' })
       return
     }
     setIsSharing(true)
@@ -40,7 +44,8 @@ export function useShareLineup({ team, formation, starters, subs, clubTheme, set
       })
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
       if (!blob) throw new Error('No se pudo generar la imagen.')
-      const fileName = `${team.name.toLowerCase().replaceAll(' ', '-')}-alineacion.png`
+      const lineupName = title || team?.name || 'mi-alineacion'
+      const fileName = `${lineupName.toLowerCase().replaceAll(' ', '-')}-alineacion.png`
       setShareFile(new File([blob], fileName, { type: 'image/png' }))
       setStatus({ loading: false, message: 'Imagen lista. Usa “Compartir foto” para enviarla.' })
     } catch (error) {
@@ -50,8 +55,9 @@ export function useShareLineup({ team, formation, starters, subs, clubTheme, set
   }
 
   const sharePreparedImage = async () => {
-    if (!shareFile || !team) return
-    const shareData = { title: `Alineación de ${team.name}`, text: `Mi once de ${team.name}`, files: [shareFile] }
+    if (!shareFile) return
+    const lineupName = title || team?.name || 'mi alineación'
+    const shareData = { title: `Alineación de ${lineupName}`, text: `Mi once de ${lineupName}`, files: [shareFile] }
     try {
       if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [shareFile] }))) {
         await navigator.share(shareData)

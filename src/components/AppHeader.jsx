@@ -1,37 +1,19 @@
 import { formatSquadCount } from '../utils/formatters'
 
-export function AppHeader({ team, startersCount, subsCount, theme, onThemeChange }) {
+export function AppHeader({ onReset }) {
   return <>
-    <header className="topbar">
-      <a className="brand" href="/" aria-label="Lineup, inicio">
-        <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 42 30" fill="none"><path d="M2 6h12l6 9 6-9h14M2 24h12l6-9 6 9h14" stroke="currentColor" strokeWidth="3" strokeLinecap="square" /><circle cx="20" cy="15" r="3" fill="currentColor" /></svg></span>
-        <span>lineup</span><i>LAB</i>
-      </a>
-      <div className="topbar-copy"><span className="live-dot" /> SISTEMA DE PIZARRA <b>01/11</b></div>
-      <div className="topbar-actions">
-        <a className="api-link" href="https://sports.bzzoiro.com/docs/football/" target="_blank" rel="noreferrer">DATA FEED</a>
-        <div className="theme-switcher" aria-label="Apariencia">
-          <button className={theme === 'light' ? 'is-active' : ''} onClick={() => onThemeChange('light')} aria-pressed={theme === 'light'}>CLARO</button>
-          <button className={theme === 'dark' ? 'is-active' : ''} onClick={() => onThemeChange('dark')} aria-pressed={theme === 'dark'}>OSCURO</button>
-        </div>
-      </div>
+    <div className="editorial-topline"><span>UN LUGAR PARA PENSAR EN FÚTBOL</span><span>ONCE JUGADORES. INFINITAS CONVERSACIONES.</span></div>
+    <header className="topbar editorial-header">
+      <a className="brand" href="/" aria-label="LineUp, inicio"><span>lineup</span><i>●</i></a>
+      <p className="headernote">El fútbol<br /><em>a tu manera.</em></p>
+      <button className="outline" type="button" onClick={onReset}>Nuevo once <span>＋</span></button>
     </header>
-
-    <section className="hero">
-      <div className="hero-rail" aria-hidden="true"><span>LINEUP LAB</span><b>01</b></div>
-      <div className="hero-copy">
-        <p className="eyebrow">TU IDEA / TU ONCE / EN UN MINUTO</p>
-        <h1>Tu idea.<br /><em>Tu XI.</em><br />Comparte.</h1>
-        <p className="hero-text">Elige un club, parte de su último once y deja tu alineación lista para compartir.</p>
-      </div>
-      <div className={`hero-club ${team ? '' : 'hero-club--empty'}`}>
-        <div className="hero-club-heading"><span>{team ? 'CLUB EN MESA' : 'PUNTO DE PARTIDA'}</span><b>{team ? 'ACTIVO' : '00'}</b></div>
-        {team ? <><img src={team.logo} alt="" /><strong>{team.name}</strong></> : <strong>Elige<br />un club</strong>}
-        <div className="hero-score" aria-label={`${startersCount} titulares y ${subsCount} suplentes`}>
-          <div><strong>{formatSquadCount(startersCount)}<span>/11</span></strong><small>TITULARES</small></div>
-          <div><strong>{formatSquadCount(subsCount)}<span>/11</span></strong><small>SUPLENTES</small></div>
-        </div>
-      </div>
-    </section>
   </>
+}
+
+export function EditorialIntro({ team, startersCount, subsCount }) {
+  return <section className="hero editorial-hero">
+    <div className="hero-copy"><p className="eyebrow"><span>LA PIZARRA</span> / EDICIÓN LIBRE</p><h1>El mejor once es <em>el tuyo.</em></h1><p className="hero-text">Mueve las piezas. Elige a tus jugadores. Defiende tu idea.</p></div>
+    <div className="edition" aria-label={`${startersCount} titulares y ${subsCount} suplentes`}>Nº <strong>{formatSquadCount(startersCount)}</strong><span>{team?.name || 'EL JUEGO EMPIEZA AQUÍ'}</span></div>
+  </section>
 }
